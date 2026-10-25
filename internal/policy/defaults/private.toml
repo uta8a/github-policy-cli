@@ -19,5 +19,8 @@ immutable = true
 [actions]
 sha_pinning_required = true
 
+[actions.workflow]
+default_workflow_permissions = "read"
+
 [security]
 dependabot_security_updates = false

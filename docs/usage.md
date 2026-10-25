@@ -33,6 +33,7 @@ See the [official API investigation and permission matrix](github-support.md). P
 - Merge commits only; squash and rebase merges: off
 - Always suggest updating pull request branches: on
 - Automatically delete head branches: on
+- Default workflow permissions: Read repository contents and packages permissions (`actions.workflow.default_workflow_permissions = "read"`)
 - Require actions to be pinned to a full-length commit SHA: on
 - Dependabot security updates: off; alerts, version updates and other Advanced Security settings are unchanged
 
@@ -52,7 +53,7 @@ New `main` rulesets have no bypass actors. If a `main` ruleset already exists, t
 
 Apply these server-side tag rules from a trusted checkout before relying on tag-triggered releases. A tag-triggered workflow runs from the tagged commit, so its own main-ancestry check cannot defend against someone who can push a tag containing a modified workflow. The owner remains trusted to choose release commits; this policy cannot protect against a compromised owner account. The CLI does not change live GitHub settings until you run apply.
 
-Both presets restrict PR creation to collaborators, disable Projects and Dependabot security updates, enable release immutability and Actions SHA pinning, and allow merge commits only across the repository. Applying the public approval policy while Actions is disabled produces an error. The CLI does not enable Actions automatically.
+Both presets restrict PR creation to collaborators, disable Projects and Dependabot security updates, enable release immutability and Actions SHA pinning, and allow merge commits only across the repository. Both presets set default workflow permissions to read-only contents and packages access. Applying either preset while Actions is disabled produces a preflight error because workflow permissions require Actions to be enabled. The CLI does not enable Actions automatically.
 
 ## Build and authentication
 
