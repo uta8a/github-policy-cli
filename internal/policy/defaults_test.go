@@ -23,7 +23,13 @@ func TestPersonalDefaults(t *testing.T) {
 				t.Fatalf("private defaults=%+v", cfg)
 			}
 		} else {
-			if !reflect.DeepEqual(cfg.Desired(), map[string]any{"actions.fork_pr_approval_policy": "all_external_contributors", "repository.allow_merge_commit": true}) || cfg.Rulesets.MainProtection == nil || !*cfg.Rulesets.MainProtection {
+			base, err := defaults.ForTarget(target(true))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := base.Desired()
+			want["actions.fork_pr_approval_policy"] = "all_external_contributors"
+			if !reflect.DeepEqual(cfg.Desired(), want) || cfg.Rulesets.MainProtection == nil || !*cfg.Rulesets.MainProtection {
 				t.Fatalf("public defaults=%+v", cfg)
 			}
 		}

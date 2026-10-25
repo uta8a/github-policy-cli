@@ -35,19 +35,18 @@ See the [official API investigation and permission matrix](docs/github-support.m
 - Require actions to be pinned to a full-length commit SHA: on
 - Dependabot security updates: off; alerts, version updates and other Advanced Security settings are unchanged
 
-Collaborator-only Issue permissions are [available in the GitHub UI](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/disabling-issues), but no official REST read/write field was confirmed. **Configure Settings > General > Issues > Collaborators only manually.** The private preset's plan/apply output also identifies this manual step. Explicit `issues.creation_policy` configuration produces an explanatory error. Temporary interaction limits are not used as a substitute.
+Collaborator-only Issue permissions are [available in the GitHub UI](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/disabling-issues), but no official REST read/write field was confirmed. **Configure Settings > General > Issues > Collaborators only manually.** Both presets' plan/apply output also identifies this manual step. Explicit `issues.creation_policy` configuration produces an explanatory error. Temporary interaction limits are not used as a substitute.
 
-[Public preset](internal/policy/defaults/public.toml):
+[Public preset](internal/policy/defaults/public.toml) includes every setting from the private preset above, plus:
 
 - Ruleset named `main`, active, targeting `~DEFAULT_BRANCH` to follow the default branch
 - Restrict deletions, block force pushes and require signed commits
 - Require a pull request before merging, zero required approvals, and Merge as the only allowed merge method
-- Enable repository merge commits as well; preserve squash/rebase settings for other branches
 - Actions: require approval for all external contributors
 
 New rulesets have no bypass actors. If a `main` ruleset already exists, the CLI updates the specified settings while preserving additional rules, other PR parameters and bypass actors. Other rulesets are unchanged. Existing rules can make effective restrictions stricter than this preset. Multiple rulesets with the same name, a target other than branches, or unreadable current values cause preflight errors. Review existing exceptions on GitHub if you also want to remove them.
 
-Public repositories do not inherit private settings; for example, their PR creation policy is unchanged. Applying the public approval policy while Actions is disabled produces an error. The CLI does not enable Actions automatically.
+Both presets restrict PR creation to collaborators, disable Projects and Dependabot security updates, enable release immutability and Actions SHA pinning, and allow merge commits only across the repository. Applying the public approval policy while Actions is disabled produces an error. The CLI does not enable Actions automatically.
 
 ## Build and authentication
 

@@ -113,8 +113,11 @@ func Build(c Config, t Target, s State) (Plan, error) {
 	isDefault := c.UsesPersonalDefaults()
 	c = resolved
 	p := Plan{Repository: t.FullName}
-	if isDefault && t.Private {
-		p.Notes = append(p.Notes, "Manual setting required: Issues > Issue permissions > Collaborators only (no documented REST read/write field). Private rulesets omitted: unavailable on GitHub Free.")
+	if isDefault {
+		p.Notes = append(p.Notes, "Manual setting required: Issues > Issue permissions > Collaborators only (no documented REST read/write field).")
+		if t.Private {
+			p.Notes = append(p.Notes, "Private rulesets omitted: unavailable on GitHub Free.")
+		}
 	}
 	if t.Private && c.Rulesets.MainProtection != nil {
 		return p, fmt.Errorf("rulesets.main_protection: unavailable for private repositories on GitHub Free")

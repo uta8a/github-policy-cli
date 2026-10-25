@@ -384,14 +384,14 @@ func TestMixedVisibilityDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
 	}
-	if writes(f.requests) != 6 || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.repos["me/a"]["has_projects"] != false || f.repos["me/a"]["allow_merge_commit"] != true || f.repos["me/a"]["allow_squash_merge"] != false || f.repos["me/a"]["pull_request_creation_policy"] != "collaborators_only" || f.forkPR["approval_policy"] != "all_external_contributors" {
+	if writes(f.requests) != 10 || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.repos["me/a"]["has_projects"] != false || f.repos["me/a"]["allow_merge_commit"] != true || f.repos["me/a"]["allow_squash_merge"] != false || f.repos["me/a"]["pull_request_creation_policy"] != "collaborators_only" || f.forkPR["approval_policy"] != "all_external_contributors" {
 		t.Fatalf("out=%s writes=%d", out, writes(f.requests))
 	}
-	if f.repos["me/b"]["has_projects"] != true || f.repos["me/b"]["pull_request_creation_policy"] != "all" {
-		t.Fatal("public inherited private-only settings")
+	if f.repos["me/b"]["has_projects"] != false || f.repos["me/b"]["pull_request_creation_policy"] != "collaborators_only" || f.repos["me/b"]["allow_squash_merge"] != false || f.repos["me/b"]["allow_update_branch"] != true {
+		t.Fatal("public did not inherit common settings")
 	}
 	out, _, err = invokeDefault(t, factory, "apply", "--all")
-	if err != nil || writes(f.requests) != 6 || strings.Count(out, "No changes.") != 2 {
+	if err != nil || writes(f.requests) != 10 || strings.Count(out, "No changes.") != 2 {
 		t.Fatalf("non-idempotent defaults: out=%s err=%v requests=%v", out, err, f.requests)
 	}
 }
@@ -421,7 +421,28 @@ func TestRulesetSkippedAfterMergeEnableFailure(t *testing.T) {
 	f.repos["me/a"]["allow_merge_commit"] = false
 	f.fail = "PATCH /repos/me/a"
 	out, stderr, err := invokeDefault(t, factory, "apply", "me/a")
-	if err == nil || !strings.Contains(out, "1 succeeded, 1 failed, 1 skipped") || !strings.Contains(stderr, "ruleset update skipped") {
+	if err == nil || !strings.Contains(out, "3 succeeded, 1 failed, 1 skipped") || !strings.Contains(stderr, "ruleset update skipped") {
 		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
+	}
+}
+
+func TestPublicDefaultsIncludeCommonSettings(t *testing.T) {
+	f, factory := setup(t)
+	f.actions["sha_pinning_required"] = false
+	out, _, err := invokeDefault(t, factory, "plan", "me/a")
+	if err != nil || writes(f.requests) != 0 || !strings.Contains(out, "Manual setting required") {
+		t.Fatalf("out=%s err=%v", out, err)
+	}
+	out, _, err = invokeDefault(t, factory, "apply", "me/a")
+	if err != nil || writes(f.requests) != 6 {
+		t.Fatalf("out=%s err=%v requests=%v", out, err, f.requests)
+	}
+	r := f.repos["me/a"]
+	if r["has_projects"] != false || r["allow_update_branch"] != true || r["delete_branch_on_merge"] != true || r["allow_squash_merge"] != false || r["allow_rebase_merge"] != false || r["allow_merge_commit"] != true || r["pull_request_creation_policy"] != "collaborators_only" || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.forkPR["approval_policy"] != "all_external_contributors" || f.ruleset == nil {
+		t.Fatal("public preset omitted a common or public-only setting")
+	}
+	out, _, err = invokeDefault(t, factory, "apply", "me/a")
+	if err != nil || writes(f.requests) != 6 || !strings.Contains(out, "No changes.") {
+		t.Fatalf("out=%s err=%v", out, err)
 	}
 }
