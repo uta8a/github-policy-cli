@@ -1,2 +1,4 @@
 /repo-policy
 /policy.toml
+
+__pycache__/

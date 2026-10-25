@@ -112,6 +112,12 @@ Unknown keys, type mismatches and invalid enum values are errors. `selected` use
 
 All targets are checked for valid configuration, ownership, visibility, capabilities and readable current values before any update. Any preflight error prevents all writes. Execution errors identify the repository and HTTP status; independent operations and remaining repositories continue. Workflow/approval updates are skipped after a failed Actions enable, and ruleset updates are skipped after a failed merge-commit enable. The summary counts successful, failed and skipped API operations; failures produce a nonzero exit code. There is no rollback or protection against concurrent edits between reads and writes.
 
+## Versioning
+
+Release tags use **`vYYYY.MM.DD.N`**, with the date in **Asia/Tokyo (JST)**. The first release each day ends in `.0`; subsequent releases increment the counter (`v2026.10.18.0`, `v2026.10.18.1`). A new day resets it to `.0`. Tags are the source of truth; there is no separate version file.
+
+Use `python3 scripts/calver.py next` to suggest the next tag after fetching remote tags, and `python3 scripts/calver.py validate TAG` to check its format and calendar date. Released binaries report the injected tag with `repo-policy --version`; development builds report `dev`. See the [versioning and release procedure](docs/versioning.md).
+
 ## Development
 
 [Agent guide](AGENTS.md) / [Design](docs/design.md) / [API investigation](docs/github-support.md)

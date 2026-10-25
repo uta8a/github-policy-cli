@@ -446,3 +446,17 @@ func TestPublicDefaultsIncludeCommonSettings(t *testing.T) {
 		t.Fatalf("out=%s err=%v", out, err)
 	}
 }
+
+func TestVersionDoesNotAuthenticate(t *testing.T) {
+	cmd := New(func() (Client, error) { t.Fatal("version must not create an API client"); return nil, nil })
+	cmd.Version = "v2026.10.18.0"
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--version"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "repo-policy version v2026.10.18.0\n" {
+		t.Fatalf("version output=%q", out.String())
+	}
+}

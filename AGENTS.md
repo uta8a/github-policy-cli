@@ -4,6 +4,8 @@ Read README.md, docs/design.md and docs/github-support.md before changing behavi
 
 Use English for all repository-facing text: README and other documentation, skills, code comments, CLI messages, commit messages, issues, and pull request titles/descriptions. Keep repository artifacts free of Japanese text.
 
+Release versions use `vYYYY.MM.DD.N` (CalVer `vYYYY.0M.0D.MICRO`), with dates in Asia/Tokyo (JST). Start at 0 each day and increment for additional releases that day. Use `scripts/calver.py` to suggest and validate tags; never move a published release tag. See docs/versioning.md.
+
 Keep repository-local skills under `.agents/skills/<skill-name>/` so Codex can discover them.
 
 For dependency additions, updates, or checks, always read and apply [dependency-cooldown](.agents/skills/dependency-cooldown/SKILL.md). The cooldown is 14 days (336 hours); use the newest compatible stable release whose publication age is verified. Check newly introduced/changed transitive dependencies too. Do not silently bypass the cooldown or automatically downgrade existing dependencies. Ordinary builds and tests alone do not trigger a dependency audit.

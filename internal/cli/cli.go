@@ -25,7 +25,7 @@ func New(factory Factory) *cobra.Command {
 	if factory == nil {
 		factory = func() (Client, error) { return github.New() }
 	}
-	root := &cobra.Command{Use: "repo-policy", Short: "Plan and apply GitHub Free personal repository settings", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{Version: "dev", Use: "repo-policy", Short: "Plan and apply GitHub Free personal repository settings", SilenceUsage: true, SilenceErrors: true}
 	for _, verb := range []string{"plan", "apply"} {
 		var configPath string
 		var all bool
