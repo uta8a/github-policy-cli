@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate CalVer and main ancestry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 scripts/calver.py validate "$RELEASE_TAG"
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main
+
+  checks:
+    name: Release checks
+    needs: validate
+    uses: ./.github/workflows/checks.yml
+
+  release:
+    name: Build and publish release
+    needs: [validate, checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          check-latest: false
+          cache: false
+      - name: Verify source and package binaries
+        run: |
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main
+          bash scripts/package-release.sh "$RELEASE_TAG" "$RUNNER_TEMP/release"
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          # Upload all assets while still a draft, then publish. Never overwrite assets.
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/release/"* \
+            --draft --verify-tag --title "$RELEASE_TAG" --generate-notes
+          gh release edit "$RELEASE_TAG" --draft=false

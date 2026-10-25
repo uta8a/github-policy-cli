@@ -1,0 +1,28 @@
+# GitHub Free personal public repositories: all private defaults plus public protection.
+# Manual: Settings > General > Issues > Collaborators only.
+# No documented REST read/write field for permanent Issue permissions.
+[repository]
+has_projects = false
+allow_merge_commit = true
+allow_squash_merge = false
+allow_rebase_merge = false
+allow_update_branch = true
+delete_branch_on_merge = true
+
+[pull_requests]
+creation_policy = "collaborators_only"
+
+[releases]
+immutable = true
+
+[actions]
+fork_pr_approval_policy = "all_external_contributors"
+sha_pinning_required = true
+
+[security]
+dependabot_security_updates = false
+
+# The ruleset name is "main"; its target follows the default branch.
+[rulesets]
+main_protection = true
+release_tag_protection = true
