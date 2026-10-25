@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dependency Cooldown"
+  short_description: "Apply a 14-day cooldown to dependency changes and checks"
+  default_prompt: "Use $dependency-cooldown to check dependency candidates against the 14-day release cooldown."
+policy:
+  allow_implicit_invocation: true
