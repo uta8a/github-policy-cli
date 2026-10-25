@@ -20,6 +20,10 @@ type testTransport func(*http.Request) (*http.Response, error)
 func (t testTransport) RoundTrip(r *http.Request) (*http.Response, error) { return t(r) }
 
 type fixture struct {
+	releases map[string]any
+	security map[string]any
+	forkPR   map[string]any
+	ruleset  map[string]any
 	repos    map[string]map[string]any
 	actions  map[string]any
 	workflow map[string]any
@@ -30,9 +34,9 @@ type fixture struct {
 
 func setup(t *testing.T) (*fixture, Factory) {
 	t.Helper()
-	f := &fixture{repos: map[string]map[string]any{}, actions: map[string]any{"enabled": true, "allowed_actions": "selected", "sha_pinning_required": true}, workflow: map[string]any{"default_workflow_permissions": "write", "can_approve_pull_request_reviews": true}}
+	f := &fixture{releases: map[string]any{"enabled": false, "enforced_by_owner": false}, security: map[string]any{"enabled": true, "paused": false}, forkPR: map[string]any{"approval_policy": "first_time_contributors"}, repos: map[string]map[string]any{}, actions: map[string]any{"enabled": true, "allowed_actions": "selected", "sha_pinning_required": true}, workflow: map[string]any{"default_workflow_permissions": "write", "can_approve_pull_request_reviews": true}}
 	for _, name := range []string{"me/a", "me/b"} {
-		f.repos[name] = map[string]any{"full_name": name, "owner": map[string]any{"type": "User", "login": "me"}, "visibility": "public", "private": false, "has_issues": true, "has_wiki": false, "delete_branch_on_merge": false, "allow_squash_merge": true, "allow_merge_commit": true, "allow_rebase_merge": false, "pull_request_creation_policy": "all"}
+		f.repos[name] = map[string]any{"full_name": name, "owner": map[string]any{"type": "User", "login": "me"}, "visibility": "public", "private": false, "has_projects": true, "allow_update_branch": false, "has_issues": true, "has_wiki": false, "delete_branch_on_merge": false, "allow_squash_merge": true, "allow_merge_commit": true, "allow_rebase_merge": false, "pull_request_creation_policy": "all"}
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + " " + r.URL.Path
@@ -51,8 +55,60 @@ func setup(t *testing.T) (*fixture, Factory) {
 			json.NewEncoder(w).Encode([]any{f.repos["me/a"], f.repos["me/b"]})
 			return
 		}
+
+		for _, feature := range []struct {
+			suffix string
+			value  map[string]any
+		}{{"/immutable-releases", f.releases}, {"/automated-security-fixes", f.security}} {
+			if strings.HasSuffix(r.URL.Path, feature.suffix) {
+				if r.Method == "GET" {
+					json.NewEncoder(w).Encode(feature.value)
+					return
+				}
+				data := make([]byte, 1)
+				n, _ := r.Body.Read(data)
+				if n != 0 {
+					t.Errorf("feature toggle must have an empty body")
+				}
+				feature.value["enabled"] = r.Method == "PUT"
+				w.WriteHeader(204)
+				return
+			}
+		}
+		if strings.HasSuffix(r.URL.Path, "/rulesets") && r.Method == "GET" {
+			rows := []any{}
+			if f.ruleset != nil {
+				rows = append(rows, f.ruleset)
+			}
+			json.NewEncoder(w).Encode(rows)
+			return
+		}
+		if strings.Contains(r.URL.Path, "/rulesets") {
+			if r.Method == "GET" {
+				json.NewEncoder(w).Encode(f.ruleset)
+				return
+			}
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+				w.WriteHeader(400)
+				return
+			}
+			f.payloads = append(f.payloads, body)
+			f.ruleset = body
+			f.ruleset["id"] = float64(123)
+			f.ruleset["source_type"] = "Repository"
+			f.ruleset["source"] = strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/repos/"), "/rulesets")
+			if r.Method == "PUT" {
+				f.ruleset["source"] = strings.Split(strings.TrimPrefix(r.URL.Path, "/repos/"), "/rulesets/")[0]
+			}
+			json.NewEncoder(w).Encode(f.ruleset)
+			return
+		}
 		var current map[string]any
 		switch {
+		case strings.HasSuffix(r.URL.Path, "/actions/permissions/fork-pr-contributor-approval"):
+			current = f.forkPR
 		case strings.HasSuffix(r.URL.Path, "/actions/permissions/workflow"):
 			current = f.workflow
 		case strings.HasSuffix(r.URL.Path, "/actions/permissions"):
@@ -299,5 +355,73 @@ func TestExplicitNonOwnedRepositoryRejected(t *testing.T) {
 				t.Fatalf("err=%v requests=%v", err, f.requests)
 			}
 		})
+	}
+}
+
+func invokeDefault(t *testing.T, f Factory, args ...string) (string, string, error) {
+	t.Helper()
+	cmd := New(f)
+	var out, stderr bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs(args)
+	err := cmd.Execute()
+	return out.String(), stderr.String(), err
+}
+func TestMixedVisibilityDefaults(t *testing.T) {
+	f, factory := setup(t)
+	f.repos["me/a"]["private"] = true
+	f.repos["me/a"]["visibility"] = "private"
+	f.actions["sha_pinning_required"] = false
+	out, _, err := invokeDefault(t, factory, "plan", "--all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if writes(f.requests) != 0 || !strings.Contains(out, "Manual setting required") || !strings.Contains(out, "rulesets.main_protection") {
+		t.Fatalf("out=%s requests=%v", out, f.requests)
+	}
+	out, stderr, err := invokeDefault(t, factory, "apply", "--all")
+	if err != nil {
+		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
+	}
+	if writes(f.requests) != 6 || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.repos["me/a"]["has_projects"] != false || f.repos["me/a"]["allow_merge_commit"] != true || f.repos["me/a"]["allow_squash_merge"] != false || f.repos["me/a"]["pull_request_creation_policy"] != "collaborators_only" || f.forkPR["approval_policy"] != "all_external_contributors" {
+		t.Fatalf("out=%s writes=%d", out, writes(f.requests))
+	}
+	if f.repos["me/b"]["has_projects"] != true || f.repos["me/b"]["pull_request_creation_policy"] != "all" {
+		t.Fatal("public inherited private-only settings")
+	}
+	out, _, err = invokeDefault(t, factory, "apply", "--all")
+	if err != nil || writes(f.requests) != 6 || strings.Count(out, "No changes.") != 2 {
+		t.Fatalf("non-idempotent defaults: out=%s err=%v requests=%v", out, err, f.requests)
+	}
+}
+func TestPrivateRulesetPreflight(t *testing.T) {
+	for _, verb := range []string{"plan", "apply"} {
+		f, factory := setup(t)
+		f.repos["me/a"]["private"] = true
+		f.repos["me/a"]["visibility"] = "private"
+		_, _, err := invoke(t, factory, "[rulesets]\nmain_protection=true", verb, "--all")
+		if err == nil || !strings.Contains(err.Error(), "GitHub Free") || writes(f.requests) != 0 || strings.Contains(strings.Join(f.requests, ","), "/repos/me/a/rulesets") {
+			t.Fatalf("err=%v requests=%v", err, f.requests)
+		}
+	}
+}
+func TestDefaultPreflightMissingNewValue(t *testing.T) {
+	f, factory := setup(t)
+	f.repos["me/a"]["private"] = true
+	f.repos["me/a"]["visibility"] = "private"
+	delete(f.repos["me/a"], "allow_update_branch")
+	_, _, err := invokeDefault(t, factory, "apply", "--all")
+	if err == nil || writes(f.requests) != 0 {
+		t.Fatalf("err=%v requests=%v", err, f.requests)
+	}
+}
+func TestRulesetSkippedAfterMergeEnableFailure(t *testing.T) {
+	f, factory := setup(t)
+	f.repos["me/a"]["allow_merge_commit"] = false
+	f.fail = "PATCH /repos/me/a"
+	out, stderr, err := invokeDefault(t, factory, "apply", "me/a")
+	if err == nil || !strings.Contains(out, "1 succeeded, 1 failed, 1 skipped") || !strings.Contains(stderr, "ruleset update skipped") {
+		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
 	}
 }

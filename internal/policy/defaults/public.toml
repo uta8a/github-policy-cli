@@ -1,0 +1,10 @@
+# GitHub Free personal public repositories.
+# The ruleset name is "main"; its target follows the default branch.
+[repository]
+allow_merge_commit = true
+
+[rulesets]
+main_protection = true
+
+[actions]
+fork_pr_approval_policy = "all_external_contributors"

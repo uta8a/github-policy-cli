@@ -4,6 +4,8 @@ Read README.md, docs/design.md and docs/github-support.md before changing behavi
 
 - Scope: GitHub.com, GitHub Free personal accounts, authenticated user's own public/private repositories. Reject Organization, collaborator-only access and other hosts. Never expand capabilities based on a paid plan.
 - Consult GitHub official REST documentation and OpenAPI before adding settings. Record plan, visibility, ownership, GET/WRITE endpoints and fine-grained PAT permissions in docs/github-support.md. Never guess a missing current value.
+- With no --config, select the embedded Public/Private personal preset per target. Explicit --config replaces the preset; never merge hidden defaults into an explicit policy. Display the manual Issue-permissions gap for private presets.
+- Public main rulesets only: preserve unrelated rules, PR parameters and bypass actors. Private Free rulesets must fail preflight. Do not delete rulesets or substitute temporary interaction limits for permanent Issue permissions.
 - Go, Cobra, go-gh/v2 RESTClient and go-toml/v2; standard library otherwise. No gh api subprocesses, state files, saved plans, prompts or background jobs.
 - Unspecified TOML keys MUST remain unchanged. Distinguish false from absent. Reject unknown keys and invalid enums with config path and field. Validate the entire batch before any write.
 - Keep planner pure and deterministic. Group changes by API. PATCH only changed fields; PUT must preserve required companion fields and unrelated supported permission fields.

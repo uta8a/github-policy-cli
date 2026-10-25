@@ -139,6 +139,10 @@ func (c *Client) Fetch(ctx context.Context, name, login string, cfg policy.Confi
 	if !strings.EqualFold(t.FullName, name) || !strings.EqualFold(strings.Split(name, "/")[0], t.Owner.Login) {
 		return t, s, fmt.Errorf("%s: repository identity changed or missing; use its current owner/name", name)
 	}
+	cfg, err = cfg.ForTarget(t)
+	if err != nil {
+		return t, s, err
+	}
 	if err = t.Validate(cfg, login); err != nil {
 		return t, s, err
 	}
@@ -152,14 +156,43 @@ func (c *Client) Fetch(ctx context.Context, name, login string, cfg policy.Confi
 			return t, s, err
 		}
 	}
+
+	if cfg.Actions.ForkPRApproval != nil {
+		if _, err = c.get(ctx, "repos/"+name+"/actions/permissions/fork-pr-contributor-approval", &s.ForkPR); err != nil {
+			return t, s, err
+		}
+	}
+	if cfg.Releases.Immutable != nil {
+		s.Releases, err = c.readFeature(ctx, name, "immutable-releases")
+		if err != nil {
+			return t, s, err
+		}
+	}
+	if cfg.Security.DependabotUpdates != nil {
+		s.Security, err = c.readFeature(ctx, name, "automated-security-fixes")
+		if err != nil {
+			return t, s, err
+		}
+	}
+	if cfg.Rulesets.MainProtection != nil {
+		s.MainRuleset, err = c.mainRuleset(ctx, t.FullName)
+		if err != nil {
+			return t, s, err
+		}
+		s.RulesetsKnown = true
+	}
 	return t, s, nil
 }
 func (c *Client) Execute(ctx context.Context, op policy.Operation) error {
-	data, err := json.Marshal(op.Body)
-	if err != nil {
-		return fmt.Errorf("invalid operation payload")
+	var body io.Reader
+	if op.Body != nil {
+		data, err := json.Marshal(op.Body)
+		if err != nil {
+			return fmt.Errorf("invalid operation payload")
+		}
+		body = bytes.NewReader(data)
 	}
-	resp, err := c.rest.RequestWithContext(ctx, op.Method, op.Endpoint, bytes.NewReader(data))
+	resp, err := c.rest.RequestWithContext(ctx, op.Method, op.Endpoint, body)
 	if err != nil {
 		return safeError(op.Method, op.Endpoint, err)
 	}

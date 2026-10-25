@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/uta8a/github-policy-cli/internal/github"
@@ -37,18 +39,24 @@ func New(factory Factory) *cobra.Command {
 			return nil
 		}}
 		apply := verb == "apply"
-		command.Flags().StringVar(&configPath, "config", "policy.toml", "TOML policy path")
+		command.Flags().StringVar(&configPath, "config", "", "Explicit TOML policy (otherwise use personal Public/Private defaults)")
 		command.Flags().BoolVar(&all, "all", false, "Target own public and private repositories visible to the token")
 		command.RunE = func(cmd *cobra.Command, args []string) error {
-			cfg, err := policy.Load(configPath)
-			if err != nil {
-				return err
+			cfg := policy.PersonalDefaults()
+			path := "built-in personal defaults"
+			if cmd.Flags().Changed("config") {
+				var err error
+				cfg, err = policy.Load(configPath)
+				if err != nil {
+					return err
+				}
+				path = configPath
 			}
 			client, err := factory()
 			if err != nil {
 				return err
 			}
-			return run(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), client, cfg, configPath, args, all, apply)
+			return run(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), client, cfg, path, args, all, apply)
 		}
 		root.AddCommand(command)
 	}
@@ -56,12 +64,15 @@ func New(factory Factory) *cobra.Command {
 }
 func render(w io.Writer, p policy.Plan) {
 	fmt.Fprintf(w, "Repository: %s\n\n", p.Repository)
+	for _, note := range p.Notes {
+		fmt.Fprintf(w, "Note: %s\n\n", note)
+	}
 	if len(p.Changes) == 0 {
 		fmt.Fprintln(w, "No changes.")
 		return
 	}
 	for _, c := range p.Changes {
-		fmt.Fprintf(w, "%s\n- %v\n+ %v\n\n", c.Path, c.Before, c.After)
+		fmt.Fprintf(w, "%s\n- %v\n+ %v\n\n", c.Path, displayValue(c.Before), displayValue(c.After))
 	}
 	fmt.Fprintf(w, "Plan: %d to change.\n", len(p.Changes))
 }
@@ -81,7 +92,12 @@ func run(ctx context.Context, out, errOut io.Writer, client Client, cfg policy.C
 	for _, name := range names {
 		target, state, fetchErr := client.Fetch(ctx, name, login, cfg)
 		if fetchErr == nil {
-			fetchErr = target.Validate(cfg, login)
+			resolved, resolveErr := cfg.ForTarget(target)
+			if resolveErr != nil {
+				fetchErr = resolveErr
+			} else {
+				fetchErr = target.Validate(resolved, login)
+			}
 		}
 		var p policy.Plan
 		if fetchErr == nil {
@@ -113,17 +129,34 @@ func run(ctx context.Context, out, errOut io.Writer, client Client, cfg policy.C
 				enabling = true
 			}
 		}
-		for i, op := range p.Operations {
+		enableFailed := false
+		mergeFailed := false
+		mergeEnabling := false
+		for _, change := range p.Changes {
+			if change.Path == "repository.allow_merge_commit" && change.Before == false && change.After == true {
+				mergeEnabling = true
+			}
+		}
+		for _, op := range p.Operations {
+			if mergeFailed && strings.HasPrefix(op.Endpoint, "repos/"+p.Repository+"/rulesets") {
+				skipped++
+				fmt.Fprintf(errOut, "%s: ruleset update skipped because enabling merge commits failed\n", p.Repository)
+				continue
+			}
+			if enableFailed && (op.Endpoint == "repos/"+p.Repository+"/actions/permissions/workflow" || op.Endpoint == "repos/"+p.Repository+"/actions/permissions/fork-pr-contributor-approval") {
+				skipped++
+				fmt.Fprintf(errOut, "%s: workflow update skipped because enabling Actions failed\n", p.Repository)
+				continue
+			}
 			if err := client.Execute(ctx, op); err != nil {
 				failed++
 				fmt.Fprintf(errOut, "%s: %v\n", p.Repository, err)
+				if mergeEnabling && op.Method == "PATCH" && op.Endpoint == "repos/"+p.Repository {
+					mergeFailed = true
+				}
 				// A failed Actions enable must not be followed by dependent workflow writes.
 				if enabling && op.Endpoint == "repos/"+p.Repository+"/actions/permissions" {
-					skipped += len(p.Operations) - i - 1
-					if i+1 < len(p.Operations) {
-						fmt.Fprintf(errOut, "%s: workflow update skipped because enabling Actions failed\n", p.Repository)
-					}
-					break
+					enableFailed = true
 				}
 				continue
 			}
@@ -135,4 +168,13 @@ func run(ctx context.Context, out, errOut io.Writer, client Client, cfg policy.C
 		return fmt.Errorf("apply failed for %d API operation(s); see errors above", failed)
 	}
 	return nil
+}
+
+func displayValue(value any) string {
+	switch value.(type) {
+	case map[string]any, []any:
+		data, _ := json.MarshalIndent(value, "", "  ")
+		return string(data)
+	}
+	return fmt.Sprint(value)
 }

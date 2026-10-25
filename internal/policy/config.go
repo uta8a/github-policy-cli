@@ -10,6 +10,8 @@ import (
 )
 
 type Repository struct {
+	HasProjects         *bool `toml:"has_projects"`
+	AllowUpdateBranch   *bool `toml:"allow_update_branch"`
 	HasIssues           *bool `toml:"has_issues"`
 	HasWiki             *bool `toml:"has_wiki"`
 	DeleteBranchOnMerge *bool `toml:"delete_branch_on_merge"`
@@ -25,14 +27,33 @@ type Workflow struct {
 	CanApprove         *bool   `toml:"can_approve_pull_request_reviews"`
 }
 type Actions struct {
-	Enabled  *bool    `toml:"enabled"`
-	Allowed  *string  `toml:"allowed_actions"`
-	Workflow Workflow `toml:"workflow"`
+	SHAPinning     *bool    `toml:"sha_pinning_required"`
+	ForkPRApproval *string  `toml:"fork_pr_approval_policy"`
+	Enabled        *bool    `toml:"enabled"`
+	Allowed        *string  `toml:"allowed_actions"`
+	Workflow       Workflow `toml:"workflow"`
+}
+type Releases struct {
+	Immutable *bool `toml:"immutable"`
+}
+type Security struct {
+	DependabotUpdates *bool `toml:"dependabot_security_updates"`
+}
+type Rulesets struct {
+	MainProtection *bool `toml:"main_protection"`
+}
+type Issues struct {
+	CreationPolicy *string `toml:"creation_policy"`
 }
 type Config struct {
-	Repository   Repository   `toml:"repository"`
-	PullRequests PullRequests `toml:"pull_requests"`
-	Actions      Actions      `toml:"actions"`
+	personalDefaults bool
+	Releases         Releases     `toml:"releases"`
+	Security         Security     `toml:"security"`
+	Rulesets         Rulesets     `toml:"rulesets"`
+	Issues           Issues       `toml:"issues"`
+	Repository       Repository   `toml:"repository"`
+	PullRequests     PullRequests `toml:"pull_requests"`
+	Actions          Actions      `toml:"actions"`
 }
 
 func Load(path string) (Config, error) {
@@ -69,12 +90,19 @@ func Parse(path string, data []byte) (Config, error) {
 	return c, nil
 }
 func (c Config) Validate() error {
+	if c.Issues.CreationPolicy != nil {
+		return fmt.Errorf("issues.creation_policy: GitHub UI supports this setting, but no documented REST read/write field is available; configure Issues > Collaborators only manually")
+	}
+	if c.Rulesets.MainProtection != nil && !*c.Rulesets.MainProtection {
+		return fmt.Errorf("rulesets.main_protection: only true is supported; omit to leave rulesets unchanged (no automatic deletion)")
+	}
 	for _, v := range []struct {
 		path    string
 		value   *string
 		allowed []string
 	}{
 		{"pull_requests.creation_policy", c.PullRequests.CreationPolicy, []string{"all", "collaborators_only"}},
+		{"actions.fork_pr_approval_policy", c.Actions.ForkPRApproval, []string{"first_time_contributors_new_to_github", "first_time_contributors", "all_external_contributors"}},
 		{"actions.allowed_actions", c.Actions.Allowed, []string{"all", "local_only", "selected"}},
 		{"actions.workflow.default_workflow_permissions", c.Actions.Workflow.DefaultPermissions, []string{"read", "write"}},
 	} {
@@ -88,8 +116,8 @@ func (c Config) Validate() error {
 			}
 		}
 	}
-	if c.Actions.Enabled != nil && !*c.Actions.Enabled && (c.Actions.Allowed != nil || c.NeedsWorkflow()) {
-		return fmt.Errorf("actions.enabled: false cannot be combined with actions.allowed_actions or actions.workflow settings")
+	if c.Actions.Enabled != nil && !*c.Actions.Enabled && (c.Actions.Allowed != nil || c.Actions.ForkPRApproval != nil || c.NeedsWorkflow()) {
+		return fmt.Errorf("actions.enabled: false cannot be combined with actions.allowed_actions, fork_pr_approval_policy or workflow settings")
 	}
 	r := c.Repository
 	if r.AllowSquashMerge != nil && r.AllowMergeCommit != nil && r.AllowRebaseMerge != nil && !*r.AllowSquashMerge && !*r.AllowMergeCommit && !*r.AllowRebaseMerge {
@@ -101,7 +129,7 @@ func (c Config) NeedsWorkflow() bool {
 	return c.Actions.Workflow.DefaultPermissions != nil || c.Actions.Workflow.CanApprove != nil
 }
 func (c Config) NeedsActions() bool {
-	return c.Actions.Enabled != nil || c.Actions.Allowed != nil || c.NeedsWorkflow()
+	return c.Actions.Enabled != nil || c.Actions.Allowed != nil || c.Actions.SHAPinning != nil || c.Actions.ForkPRApproval != nil || c.NeedsWorkflow()
 }
 
 // Desired contains API names; CLI-specific nesting stays in Config.
@@ -111,7 +139,7 @@ func (c Config) Desired() map[string]any {
 		k string
 		v *bool
 	}{
-		{"has_issues", c.Repository.HasIssues}, {"has_wiki", c.Repository.HasWiki}, {"delete_branch_on_merge", c.Repository.DeleteBranchOnMerge},
+		{"has_projects", c.Repository.HasProjects}, {"allow_update_branch", c.Repository.AllowUpdateBranch}, {"has_issues", c.Repository.HasIssues}, {"has_wiki", c.Repository.HasWiki}, {"delete_branch_on_merge", c.Repository.DeleteBranchOnMerge},
 		{"allow_squash_merge", c.Repository.AllowSquashMerge}, {"allow_merge_commit", c.Repository.AllowMergeCommit}, {"allow_rebase_merge", c.Repository.AllowRebaseMerge},
 	} {
 		if f.v != nil {
@@ -120,6 +148,18 @@ func (c Config) Desired() map[string]any {
 	}
 	if c.PullRequests.CreationPolicy != nil {
 		out["pull_requests.creation_policy"] = *c.PullRequests.CreationPolicy
+	}
+	if c.Actions.SHAPinning != nil {
+		out["actions.sha_pinning_required"] = *c.Actions.SHAPinning
+	}
+	if c.Actions.ForkPRApproval != nil {
+		out["actions.fork_pr_approval_policy"] = *c.Actions.ForkPRApproval
+	}
+	if c.Releases.Immutable != nil {
+		out["releases.immutable"] = *c.Releases.Immutable
+	}
+	if c.Security.DependabotUpdates != nil {
+		out["security.dependabot_security_updates"] = *c.Security.DependabotUpdates
 	}
 	if c.Actions.Enabled != nil {
 		out["actions.enabled"] = *c.Actions.Enabled

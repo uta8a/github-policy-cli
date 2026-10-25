@@ -34,6 +34,12 @@ func (t Target) Validate(c Config, login string) error {
 	if t.Archived {
 		return fmt.Errorf("%s: archived repositories are read-only", t.FullName)
 	}
+	if t.Private && c.Rulesets.MainProtection != nil {
+		return fmt.Errorf("%s: rulesets.main_protection: rulesets are unavailable for private repositories on GitHub Free", t.FullName)
+	}
+	if t.Private && c.Actions.ForkPRApproval != nil {
+		return fmt.Errorf("%s: actions.fork_pr_approval_policy: public-fork contributor approval is only supported for public repositories", t.FullName)
+	}
 	if t.Private && c.Repository.HasWiki != nil {
 		return fmt.Errorf("%s: repository.has_wiki: unavailable for private repositories on GitHub Free (omit this field)", t.FullName)
 	}
@@ -41,9 +47,14 @@ func (t Target) Validate(c Config, login string) error {
 }
 
 type State struct {
-	Repository map[string]any
-	Actions    map[string]any
-	Workflow   map[string]any
+	Releases      map[string]any
+	Security      map[string]any
+	ForkPR        map[string]any
+	MainRuleset   map[string]any
+	RulesetsKnown bool
+	Repository    map[string]any
+	Actions       map[string]any
+	Workflow      map[string]any
 }
 type Change struct {
 	Path          string
@@ -57,10 +68,20 @@ type Plan struct {
 	Repository string
 	Changes    []Change
 	Operations []Operation
+	Notes      []string
 }
 
 func actual(s State, path string) (any, bool) {
 	switch {
+	case path == "releases.immutable":
+		v, ok := s.Releases["enabled"]
+		return v, ok
+	case path == "security.dependabot_security_updates":
+		v, ok := s.Security["enabled"]
+		return v, ok
+	case path == "actions.fork_pr_approval_policy":
+		v, ok := s.ForkPR["approval_policy"]
+		return v, ok
 	case path == "pull_requests.creation_policy":
 		v, ok := s.Repository["pull_request_creation_policy"]
 		return v, ok
@@ -85,7 +106,19 @@ func required(m map[string]any, k string, kind any) (any, error) {
 
 // Build is pure: it validates current values and constructs requests without I/O.
 func Build(c Config, t Target, s State) (Plan, error) {
+	resolved, err := c.ForTarget(t)
+	if err != nil {
+		return Plan{}, err
+	}
+	isDefault := c.UsesPersonalDefaults()
+	c = resolved
 	p := Plan{Repository: t.FullName}
+	if isDefault && t.Private {
+		p.Notes = append(p.Notes, "Manual setting required: Issues > Issue permissions > Collaborators only (no documented REST read/write field). Private rulesets omitted: unavailable on GitHub Free.")
+	}
+	if t.Private && c.Rulesets.MainProtection != nil {
+		return p, fmt.Errorf("rulesets.main_protection: unavailable for private repositories on GitHub Free")
+	}
 	if err := c.Validate(); err != nil {
 		return p, err
 	}
@@ -107,6 +140,8 @@ func Build(c Config, t Target, s State) (Plan, error) {
 			switch path {
 			case "pull_requests.creation_policy":
 				valid = v == "all" || v == "collaborators_only"
+			case "actions.fork_pr_approval_policy":
+				valid = v == "first_time_contributors_new_to_github" || v == "first_time_contributors" || v == "all_external_contributors"
 			case "actions.allowed_actions":
 				valid = v == "all" || v == "local_only" || v == "selected"
 			case "actions.workflow.default_workflow_permissions":
@@ -121,6 +156,8 @@ func Build(c Config, t Target, s State) (Plan, error) {
 		}
 		p.Changes = append(p.Changes, Change{path, before, after})
 		switch {
+		case path == "releases.immutable" || path == "security.dependabot_security_updates" || path == "actions.fork_pr_approval_policy":
+			// Dedicated endpoint operations are built after the grouped requests.
 		case path == "pull_requests.creation_policy":
 			repo["pull_request_creation_policy"] = after
 		case strings.HasPrefix(path, "repository."):
@@ -157,7 +194,7 @@ func Build(c Config, t Target, s State) (Plan, error) {
 		if c.Actions.Enabled != nil {
 			enabled = *c.Actions.Enabled
 		}
-		if !enabled && (c.Actions.Allowed != nil || c.NeedsWorkflow()) {
+		if !enabled && (c.Actions.Allowed != nil || c.Actions.ForkPRApproval != nil || c.NeedsWorkflow()) {
 			return p, fmt.Errorf("actions.enabled: enable Actions before managing allowed_actions or workflow settings")
 		}
 	}
@@ -210,5 +247,37 @@ func Build(c Config, t Target, s State) (Plan, error) {
 		}
 		p.Operations = append(p.Operations, Operation{"PUT", base + "/actions/permissions/workflow", workflow})
 	}
+
+	for _, change := range p.Changes {
+		switch change.Path {
+		case "releases.immutable", "security.dependabot_security_updates":
+			endpoint := "automated-security-fixes"
+			if change.Path == "releases.immutable" {
+				endpoint = "immutable-releases"
+				if change.After == false {
+					enforced, err := required(s.Releases, "enforced_by_owner", false)
+					if err != nil {
+						return p, fmt.Errorf("releases.immutable: %w", err)
+					}
+					if enforced == true {
+						return p, fmt.Errorf("releases.immutable: enforced by repository owner")
+					}
+				}
+			}
+			method := "DELETE"
+			if change.After == true {
+				method = "PUT"
+			}
+			p.Operations = append(p.Operations, Operation{Method: method, Endpoint: base + "/" + endpoint})
+		case "actions.fork_pr_approval_policy":
+			p.Operations = append(p.Operations, Operation{"PUT", base + "/actions/permissions/fork-pr-contributor-approval", map[string]any{"approval_policy": change.After}})
+		}
+	}
+	if c.Rulesets.MainProtection != nil {
+		if err := planMainRuleset(&p, t, s); err != nil {
+			return p, err
+		}
+	}
+	sort.Slice(p.Changes, func(i, j int) bool { return p.Changes[i].Path < p.Changes[j].Path })
 	return p, nil
 }
