@@ -4,7 +4,7 @@ Read README.md, docs/design.md and docs/github-support.md before changing behavi
 
 Use English for all repository-facing text: README and other documentation, skills, code comments, CLI messages, commit messages, issues, and pull request titles/descriptions. Keep repository artifacts free of Japanese text.
 
-Release versions use `vYYYY.MM.DD.N` (CalVer `vYYYY.0M.0D.MICRO`), with dates in Asia/Tokyo (JST). Start at 0 each day and increment for additional releases that day. Use `scripts/calver.py` to suggest and validate tags; never move a published release tag. See docs/versioning.md.
+Release versions use CalVer `vYYYY.0M.0D.MICRO`, with dates in Asia/Tokyo (JST). Start at 0 each day and increment for additional releases that day. Use `scripts/calver.py` to suggest and validate tags; never move a published release tag. See docs/versioning.md.
 
 Keep repository-local skills under `.agents/skills/<skill-name>/` so Codex can discover them.
 

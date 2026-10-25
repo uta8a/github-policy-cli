@@ -1,10 +1,10 @@
 # Versioning
 
-Release tags are the source of truth. Use `vYYYY.MM.DD.N`, corresponding to CalVer `vYYYY.0M.0D.MICRO`:
+Release tags are the source of truth. Use [CalVer](https://calver.org/) notation `vYYYY.0M.0D.MICRO`:
 
 - `YYYY`: four-digit Gregorian year.
-- `MM` and `DD`: zero-padded month and day.
-- `N`: a nonnegative integer without leading zeroes, starting at 0 each day.
+- `0M` and `0D`: zero-padded month and day.
+- `MICRO`: a nonnegative integer without leading zeroes, starting at 0 each day.
 - The date is the release date in **Asia/Tokyo (JST, UTC+09:00)**.
 
 For example, `v2026.10.18.0` is the first release on October 18, 2026 JST, followed by `v2026.10.18.1` and `v2026.10.18.2`. The next day's first release is `v2026.10.19.0`. Compare counters numerically: `.10` follows `.9`.

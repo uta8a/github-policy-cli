@@ -13,7 +13,7 @@ TAG = re.compile(r"v([0-9]{4})\.([0-9]{2})\.([0-9]{2})\.(0|[1-9][0-9]*)", re.ASC
 def parse_tag(value):
     match = TAG.fullmatch(value)
     if not match:
-        raise ValueError("expected vYYYY.MM.DD.N with a nonnegative, unpadded counter")
+        raise ValueError("expected vYYYY.0M.0D.MICRO (e.g. v2026.10.18.0) with a nonnegative, unpadded counter")
     year, month, day, counter = map(int, match.groups())
     try:
         date = dt.date(year, month, day)
