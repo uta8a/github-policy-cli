@@ -28,6 +28,7 @@ type fixture struct {
 	repos      map[string]map[string]any
 	actions    map[string]any
 	workflow   map[string]any
+	paginate   bool
 	requests   []string
 	payloads   []map[string]any
 	fail       string
@@ -53,6 +54,15 @@ func setup(t *testing.T) (*fixture, Factory) {
 			return
 		}
 		if r.URL.Path == "/user/repos" {
+			if f.paginate {
+				if r.URL.Query().Get("page") == "2" {
+					json.NewEncoder(w).Encode([]any{f.repos["me/b"]})
+				} else {
+					w.Header().Set("Link", "<http://"+r.Host+"/user/repos?page=2>; rel=\"next\"")
+					json.NewEncoder(w).Encode([]any{f.repos["me/a"]})
+				}
+				return
+			}
 			json.NewEncoder(w).Encode([]any{f.repos["me/a"], f.repos["me/b"]})
 			return
 		}
@@ -381,6 +391,7 @@ func invokeDefault(t *testing.T, f Factory, args ...string) (string, string, err
 }
 func TestMixedVisibilityDefaults(t *testing.T) {
 	f, factory := setup(t)
+	f.paginate = true
 	f.repos["me/a"]["private"] = true
 	f.repos["me/a"]["visibility"] = "private"
 	f.actions["sha_pinning_required"] = false
@@ -395,14 +406,14 @@ func TestMixedVisibilityDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
 	}
-	if writes(f.requests) != 11 || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.repos["me/a"]["has_projects"] != false || f.repos["me/a"]["allow_merge_commit"] != true || f.repos["me/a"]["allow_squash_merge"] != false || f.repos["me/a"]["pull_request_creation_policy"] != "collaborators_only" || f.forkPR["approval_policy"] != "all_external_contributors" {
+	if writes(f.requests) != 13 || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.repos["me/a"]["has_projects"] != false || f.repos["me/a"]["allow_merge_commit"] != true || f.repos["me/a"]["allow_squash_merge"] != false || f.repos["me/a"]["pull_request_creation_policy"] != "collaborators_only" || f.forkPR["approval_policy"] != "all_external_contributors" {
 		t.Fatalf("out=%s writes=%d", out, writes(f.requests))
 	}
 	if f.repos["me/b"]["has_projects"] != false || f.repos["me/b"]["pull_request_creation_policy"] != "collaborators_only" || f.repos["me/b"]["allow_squash_merge"] != false || f.repos["me/b"]["allow_update_branch"] != true {
 		t.Fatal("public did not inherit common settings")
 	}
 	out, _, err = invokeDefault(t, factory, "apply", "--all")
-	if err != nil || writes(f.requests) != 11 || strings.Count(out, "No changes.") != 2 {
+	if err != nil || writes(f.requests) != 13 || strings.Count(out, "No changes.") != 2 {
 		t.Fatalf("non-idempotent defaults: out=%s err=%v requests=%v", out, err, f.requests)
 	}
 }
@@ -432,7 +443,7 @@ func TestRulesetSkippedAfterMergeEnableFailure(t *testing.T) {
 	f.repos["me/a"]["allow_merge_commit"] = false
 	f.fail = "PATCH /repos/me/a"
 	out, stderr, err := invokeDefault(t, factory, "apply", "me/a")
-	if err == nil || !strings.Contains(out, "4 succeeded, 1 failed, 1 skipped") || !strings.Contains(stderr, "ruleset update skipped") {
+	if err == nil || !strings.Contains(out, "5 succeeded, 1 failed, 1 skipped") || !strings.Contains(stderr, "ruleset update skipped") {
 		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
 	}
 }
@@ -445,15 +456,15 @@ func TestPublicDefaultsIncludeCommonSettings(t *testing.T) {
 		t.Fatalf("out=%s err=%v", out, err)
 	}
 	out, _, err = invokeDefault(t, factory, "apply", "me/a")
-	if err != nil || writes(f.requests) != 7 {
+	if err != nil || writes(f.requests) != 8 {
 		t.Fatalf("out=%s err=%v requests=%v", out, err, f.requests)
 	}
 	r := f.repos["me/a"]
-	if r["has_projects"] != false || r["allow_update_branch"] != true || r["delete_branch_on_merge"] != true || r["allow_squash_merge"] != false || r["allow_rebase_merge"] != false || r["allow_merge_commit"] != true || r["pull_request_creation_policy"] != "collaborators_only" || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.forkPR["approval_policy"] != "all_external_contributors" || f.ruleset == nil || f.tagRuleset == nil {
+	if r["has_projects"] != false || r["allow_update_branch"] != true || r["delete_branch_on_merge"] != true || r["allow_squash_merge"] != false || r["allow_rebase_merge"] != false || r["allow_merge_commit"] != true || r["pull_request_creation_policy"] != "collaborators_only" || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.workflow["default_workflow_permissions"] != "read" || f.workflow["can_approve_pull_request_reviews"] != true || f.forkPR["approval_policy"] != "all_external_contributors" || f.ruleset == nil || f.tagRuleset == nil {
 		t.Fatal("public preset omitted a common or public-only setting")
 	}
 	out, _, err = invokeDefault(t, factory, "apply", "me/a")
-	if err != nil || writes(f.requests) != 7 || !strings.Contains(out, "No changes.") {
+	if err != nil || writes(f.requests) != 8 || !strings.Contains(out, "No changes.") {
 		t.Fatalf("out=%s err=%v", out, err)
 	}
 }
@@ -496,5 +507,31 @@ func TestReleaseTagPreflightAndIdempotency(t *testing.T) {
 	f.tagRuleset["bypass_actors"] = []any{}
 	if _, _, err := invoke(t, factory, cfg, "apply", "me/a"); err != nil || writes(f.requests) != 2 {
 		t.Fatalf("update err=%v", err)
+	}
+}
+
+func TestDefaultWorkflowPermissionsPreflight(t *testing.T) {
+	for _, private := range []bool{false, true} {
+		for _, failure := range []string{"disabled", "missing permissions", "missing companion"} {
+			t.Run(fmt.Sprintf("private=%v/%s", private, failure), func(t *testing.T) {
+				f, factory := setup(t)
+				f.repos["me/a"]["private"] = private
+				if private {
+					f.repos["me/a"]["visibility"] = "private"
+				}
+				switch failure {
+				case "disabled":
+					f.actions["enabled"] = false
+				case "missing permissions":
+					delete(f.workflow, "default_workflow_permissions")
+				case "missing companion":
+					delete(f.workflow, "can_approve_pull_request_reviews")
+				}
+				_, _, err := invokeDefault(t, factory, "apply", "--all")
+				if err == nil || writes(f.requests) != 0 {
+					t.Fatalf("err=%v requests=%v", err, f.requests)
+				}
+			})
+		}
 	}
 }

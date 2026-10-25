@@ -18,7 +18,7 @@ func TestPersonalDefaults(t *testing.T) {
 			t.Fatal(err)
 		}
 		if private {
-			want := map[string]any{"repository.has_projects": false, "repository.allow_merge_commit": true, "repository.allow_squash_merge": false, "repository.allow_rebase_merge": false, "repository.allow_update_branch": true, "repository.delete_branch_on_merge": true, "pull_requests.creation_policy": "collaborators_only", "releases.immutable": true, "actions.sha_pinning_required": true, "security.dependabot_security_updates": false}
+			want := map[string]any{"repository.has_projects": false, "repository.allow_merge_commit": true, "repository.allow_squash_merge": false, "repository.allow_rebase_merge": false, "repository.allow_update_branch": true, "repository.delete_branch_on_merge": true, "pull_requests.creation_policy": "collaborators_only", "releases.immutable": true, "actions.sha_pinning_required": true, "actions.workflow.default_workflow_permissions": "read", "security.dependabot_security_updates": false}
 			if !reflect.DeepEqual(cfg.Desired(), want) || cfg.Rulesets.MainProtection != nil || cfg.Rulesets.ReleaseTagProtection != nil || cfg.Repository.HasWiki != nil {
 				t.Fatalf("private defaults=%+v", cfg)
 			}
