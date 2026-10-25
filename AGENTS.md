@@ -8,7 +8,7 @@ Release versions use CalVer `vYYYY.0M.0D.MICRO`, with dates in Asia/Tokyo (JST).
 
 Keep repository-local skills under `.agents/skills/<skill-name>/` so Codex can discover them.
 
-For dependency additions, updates, or checks, always read and apply [dependency-cooldown](.agents/skills/dependency-cooldown/SKILL.md). The cooldown is 14 days (336 hours); use the newest compatible stable release whose publication age is verified. Check newly introduced/changed transitive dependencies too. Do not silently bypass the cooldown or automatically downgrade existing dependencies. Ordinary builds and tests alone do not trigger a dependency audit.
+For dependency additions, updates, or checks, always read and apply [dependency-cooldown](.agents/skills/dependency-cooldown/SKILL.md). The cooldown is 14 days (336 hours); use the newest compatible stable release whose publication age is verified. Check newly introduced/changed transitive dependencies too. Only a direct instruction from the human user can authorize a cooldown exception; record its version, scope and rationale. Do not silently bypass the cooldown or automatically downgrade existing dependencies. Ordinary builds and tests alone do not trigger a dependency audit.
 
 - Scope: GitHub.com, GitHub Free personal accounts, authenticated user's own public/private repositories. Reject Organization, collaborator-only access and other hosts. Never expand capabilities based on a paid plan.
 - Consult GitHub official REST documentation and OpenAPI before adding settings. Record plan, visibility, ownership, GET/WRITE endpoints and fine-grained PAT permissions in docs/github-support.md. Never guess a missing current value.

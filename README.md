@@ -118,6 +118,12 @@ Release tags use **`vYYYY.0M.0D.MICRO`**, with the date in **Asia/Tokyo (JST)**.
 
 Use `python3 scripts/calver.py next` to suggest the next tag after fetching remote tags, and `python3 scripts/calver.py validate TAG` to check its format and calendar date. Released binaries report the injected tag with `repo-policy --version`; development builds report `dev`. See the [versioning and release procedure](docs/versioning.md).
 
+## CI and releases
+
+[CI](.github/workflows/ci.yml) runs build, gofmt verification, lint (`go vet`) and tests (`go test -race` plus the Python versioning tests) on pull requests and pushes to `main`. The [shared checks workflow](.github/workflows/checks.yml) is also used before releases.
+
+Pushing a `v*` tag starts the [release workflow](.github/workflows/release.yml). It validates CalVer and verifies that the tagged commit belongs to `main`, runs all checks, and publishes Darwin ARM64 and Linux AMD64 archives with `checksums.txt`. See [release details](docs/versioning.md#automated-release) and the [CI toolchain policy](docs/ci.md). No repository settings are changed by these workflows.
+
 ## Development
 
 [Agent guide](AGENTS.md) / [Design](docs/design.md) / [API investigation](docs/github-support.md)

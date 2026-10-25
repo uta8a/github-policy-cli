@@ -35,7 +35,7 @@ CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=$version" -o repo-pol
 # repo-policy version v2026.10.18.0
 ```
 
-Builds without this injection report `dev`. Version display does not require a GitHub token or API access. Future tag-triggered release automation must validate the tag and inject it into each target binary.
+Builds without this injection report `dev`. Version display does not require a GitHub token or API access. The tag-triggered release workflow validates the tag and injects it into each target binary.
 
 These four-component CalVer tags are application release identifiers, not [Go module semantic versions](https://go.dev/ref/mod#versions). Install released binaries or build from a checkout; do not rely on `go install ...@v2026.10.18.0` to resolve a Go module version.
 
@@ -46,3 +46,27 @@ python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
 Tests cover calendar validity, leap days, counter ordering, daily resets, backdating and the JST midnight boundary. The CLI test verifies that `--version` does not construct an authenticated API client.
+
+## Automated release
+
+`.github/workflows/release.yml` runs on `v*` tag pushes. A tag push does not carry a target branch, so the workflow checks out the triggering commit with full history and requires it to be an ancestor of `origin/main`. It validates the real CalVer date and counter format, then runs the same build, formatting, lint and test matrix used for PRs. The tag date is not required to equal the rerun date, so an existing tag can be retried later.
+
+After validation, the release job builds these archives with `CGO_ENABLED=0`, an injected version, and stripped binaries:
+
+- `repo-policy_TAG_darwin_arm64.tar.gz`: Apple Silicon macOS.
+- `repo-policy_TAG_linux_amd64.tar.gz`: x86-64 Linux.
+- `checksums.txt`: SHA-256 hashes of both archives.
+
+Each archive contains `repo-policy`, LICENSE and README.md in a versioned directory. The binary version includes the full tag, for example `v2026.10.18.0`.
+
+The release is first created as a draft, all assets are uploaded, and only then is it published. Existing release assets are never overwritten. If publication leaves a draft behind, inspect and remove that failed draft on GitHub before rerunning the workflow for the unchanged tag. A published release must use a new tag for any changed source. Never move the original tag. No workflow creates tags automatically.
+
+Only the release job has `contents: write`; validation and CI have `contents: read`. Actions are pinned to complete commit SHAs. Release runs for the same tag are serialized and not canceled mid-publication. No scheduled or PR-triggered publication is configured.
+
+To check packaging locally without publishing:
+
+```sh
+bash scripts/package-release.sh v2026.10.18.0 /tmp/repo-policy-release
+```
+
+The output directory must not already exist. Verify `checksums.txt` with `sha256sum -c checksums.txt` on Linux or `shasum -a 256 -c checksums.txt` on macOS from inside the output directory.
