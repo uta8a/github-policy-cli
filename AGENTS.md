@@ -4,7 +4,9 @@ Read README.md, docs/design.md and docs/github-support.md before changing behavi
 
 Use English for all repository-facing text: README and other documentation, skills, code comments, CLI messages, commit messages, issues, and pull request titles/descriptions. Keep repository artifacts free of Japanese text.
 
-For dependency additions, updates, or checks, always read and apply [dependency-cooldown](skills/dependency-cooldown/SKILL.md). The cooldown is 14 days (336 hours); use the newest compatible stable release whose publication age is verified. Check newly introduced/changed transitive dependencies too. Do not silently bypass the cooldown or automatically downgrade existing dependencies. Ordinary builds and tests alone do not trigger a dependency audit.
+Keep repository-local skills under `.agents/skills/<skill-name>/` so Codex can discover them.
+
+For dependency additions, updates, or checks, always read and apply [dependency-cooldown](.agents/skills/dependency-cooldown/SKILL.md). The cooldown is 14 days (336 hours); use the newest compatible stable release whose publication age is verified. Check newly introduced/changed transitive dependencies too. Do not silently bypass the cooldown or automatically downgrade existing dependencies. Ordinary builds and tests alone do not trigger a dependency audit.
 
 - Scope: GitHub.com, GitHub Free personal accounts, authenticated user's own public/private repositories. Reject Organization, collaborator-only access and other hosts. Never expand capabilities based on a paid plan.
 - Consult GitHub official REST documentation and OpenAPI before adding settings. Record plan, visibility, ownership, GET/WRITE endpoints and fine-grained PAT permissions in docs/github-support.md. Never guess a missing current value.

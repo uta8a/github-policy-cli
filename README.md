@@ -117,7 +117,7 @@ All targets are checked for valid configuration, ownership, visibility, capabili
 
 [Agent guide](AGENTS.md) / [Design](docs/design.md) / [API investigation](docs/github-support.md)
 
-Use English for repository documentation, code comments, CLI messages, commit messages, issues, and pull request titles/descriptions. For dependency additions, updates or checks, apply the [14-day dependency cooldown skill](skills/dependency-cooldown/SKILL.md).
+Use English for repository documentation, code comments, CLI messages, commit messages, issues, and pull request titles/descriptions. For dependency additions, updates or checks, apply the [14-day dependency cooldown skill](.agents/skills/dependency-cooldown/SKILL.md).
 
 ```sh
 go test ./...
