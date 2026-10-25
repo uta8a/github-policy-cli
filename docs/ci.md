@@ -8,6 +8,10 @@
 
 Checks and release builds use the triggering commit SHA, with checkout credentials removed after checkout. Setup-go's cache is disabled to avoid introducing additional cache state or save operations in untrusted PRs. GitHub-hosted Ubuntu supplies Python, Git, curl, tar and the GitHub CLI; these platform tools follow the runner image rather than project dependency manifests.
 
+## Tag permissions
+
+The release workflow's ancestry checks protect against mistakes in trusted workflow code. They cannot constrain an attacker who can tag a modified workflow. Before enabling tag-based publishing, apply the public default's owner-only release-tags ruleset from a trusted checkout. See the [release trust boundary](versioning.md#release-trust-boundary). CI does not modify these settings automatically. This policy controls matching tag operations; it does not independently restrict every way a repository-write workflow could publish a release. Review workflow-write and publication permissions separately, and keep the owner account trusted.
+
 ## Cooldown review
 
 Reviewed on 2026-10-25 UTC. No application dependency versions were changed. The JavaScript Actions are used as their bundled, SHA-pinned distributions; CI does not install their development dependencies.

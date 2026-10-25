@@ -56,16 +56,37 @@ func TestRulesetPaginationAndDetail(t *testing.T) {
 		}
 		fmt.Fprint(w, `[{"id":42,"name":"main","source_type":"Repository","source":"me/repo"}]`)
 	})
-	got, err := c.mainRuleset(context.Background(), "me/repo")
+	got, err := c.namedRuleset(context.Background(), "me/repo", "main", "rulesets.main_protection")
 	if err != nil || got["id"] != float64(42) || calls != 3 {
 		t.Fatalf("got=%v err=%v calls=%d", got, err, calls)
 	}
 }
 func TestRulesetDiscoveryFailsClosed(t *testing.T) {
-	for _, body := range []string{`null`, `[{"id":1,"name":"main","source_type":"Organization","source":"org"}]`, `[{"id":1,"name":"main","source_type":"Repository","source":"me/repo"},{"id":2,"name":"main","source_type":"Repository","source":"me/repo"}]`} {
+	for _, body := range []string{`null`, `[null]`, `[{}]`, `[{"id":1,"name":"main","source_type":"Organization","source":"org"}]`, `[{"id":1,"name":"main","source_type":"Repository","source":"me/repo"},{"id":2,"name":"main","source_type":"Repository","source":"me/repo"}]`} {
 		c := mock(t, func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) })
-		if _, err := c.mainRuleset(context.Background(), "me/repo"); err == nil {
+		if _, err := c.namedRuleset(context.Background(), "me/repo", "main", "rulesets.main_protection"); err == nil {
 			t.Fatalf("accepted %s", body)
 		}
+	}
+}
+
+func TestReleaseTagRulesetDiscovery(t *testing.T) {
+	calls := 0
+	c := mock(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if strings.HasSuffix(r.URL.Path, "/rulesets/7") {
+			fmt.Fprint(w, `{"id":7,"name":"release-tags","target":"tag","source_type":"Repository","source":"me/repo"}`)
+			return
+		}
+		if r.URL.Query().Get("page") == "1" {
+			w.Header().Set("Link", `<https://ignored.invalid>; rel="next"`)
+			fmt.Fprint(w, `[{"id":1,"name":"main"}]`)
+			return
+		}
+		fmt.Fprint(w, `[{"id":7,"name":"release-tags","source_type":"Repository","source":"me/repo"}]`)
+	})
+	got, err := c.namedRuleset(context.Background(), "me/repo", "release-tags", "rulesets.release_tag_protection")
+	if err != nil || got["id"] != float64(7) || calls != 3 {
+		t.Fatalf("got=%v err=%v calls=%d", got, err, calls)
 	}
 }

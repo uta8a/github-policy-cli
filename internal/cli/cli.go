@@ -138,7 +138,7 @@ func run(ctx context.Context, out, errOut io.Writer, client Client, cfg policy.C
 			}
 		}
 		for _, op := range p.Operations {
-			if mergeFailed && strings.HasPrefix(op.Endpoint, "repos/"+p.Repository+"/rulesets") {
+			if mergeFailed && strings.HasPrefix(op.Endpoint, "repos/"+p.Repository+"/rulesets") && op.Body["name"] == "main" {
 				skipped++
 				fmt.Fprintf(errOut, "%s: ruleset update skipped because enabling merge commits failed\n", p.Repository)
 				continue

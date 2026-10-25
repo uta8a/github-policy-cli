@@ -19,7 +19,7 @@ func TestPersonalDefaults(t *testing.T) {
 		}
 		if private {
 			want := map[string]any{"repository.has_projects": false, "repository.allow_merge_commit": true, "repository.allow_squash_merge": false, "repository.allow_rebase_merge": false, "repository.allow_update_branch": true, "repository.delete_branch_on_merge": true, "pull_requests.creation_policy": "collaborators_only", "releases.immutable": true, "actions.sha_pinning_required": true, "security.dependabot_security_updates": false}
-			if !reflect.DeepEqual(cfg.Desired(), want) || cfg.Rulesets.MainProtection != nil || cfg.Repository.HasWiki != nil {
+			if !reflect.DeepEqual(cfg.Desired(), want) || cfg.Rulesets.MainProtection != nil || cfg.Rulesets.ReleaseTagProtection != nil || cfg.Repository.HasWiki != nil {
 				t.Fatalf("private defaults=%+v", cfg)
 			}
 		} else {
@@ -29,7 +29,7 @@ func TestPersonalDefaults(t *testing.T) {
 			}
 			want := base.Desired()
 			want["actions.fork_pr_approval_policy"] = "all_external_contributors"
-			if !reflect.DeepEqual(cfg.Desired(), want) || cfg.Rulesets.MainProtection == nil || !*cfg.Rulesets.MainProtection {
+			if !reflect.DeepEqual(cfg.Desired(), want) || cfg.Rulesets.MainProtection == nil || !*cfg.Rulesets.MainProtection || cfg.Rulesets.ReleaseTagProtection == nil || !*cfg.Rulesets.ReleaseTagProtection {
 				t.Fatalf("public defaults=%+v", cfg)
 			}
 		}

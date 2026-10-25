@@ -10,6 +10,7 @@ import (
 type Target struct {
 	FullName string `json:"full_name"`
 	Owner    struct {
+		ID    int64  `json:"id"`
 		Login string `json:"login"`
 		Type  string `json:"type"`
 	} `json:"owner"`
@@ -34,6 +35,9 @@ func (t Target) Validate(c Config, login string) error {
 	if t.Archived {
 		return fmt.Errorf("%s: archived repositories are read-only", t.FullName)
 	}
+	if t.Private && c.Rulesets.ReleaseTagProtection != nil {
+		return fmt.Errorf("%s: rulesets.release_tag_protection: rulesets are unavailable for private repositories on GitHub Free", t.FullName)
+	}
 	if t.Private && c.Rulesets.MainProtection != nil {
 		return fmt.Errorf("%s: rulesets.main_protection: rulesets are unavailable for private repositories on GitHub Free", t.FullName)
 	}
@@ -47,14 +51,16 @@ func (t Target) Validate(c Config, login string) error {
 }
 
 type State struct {
-	Releases      map[string]any
-	Security      map[string]any
-	ForkPR        map[string]any
-	MainRuleset   map[string]any
-	RulesetsKnown bool
-	Repository    map[string]any
-	Actions       map[string]any
-	Workflow      map[string]any
+	ReleaseTagRuleset map[string]any
+	ReleaseTagsKnown  bool
+	Releases          map[string]any
+	Security          map[string]any
+	ForkPR            map[string]any
+	MainRuleset       map[string]any
+	RulesetsKnown     bool
+	Repository        map[string]any
+	Actions           map[string]any
+	Workflow          map[string]any
 }
 type Change struct {
 	Path          string
@@ -278,6 +284,11 @@ func Build(c Config, t Target, s State) (Plan, error) {
 	}
 	if c.Rulesets.MainProtection != nil {
 		if err := planMainRuleset(&p, t, s); err != nil {
+			return p, err
+		}
+	}
+	if c.Rulesets.ReleaseTagProtection != nil {
+		if err := planReleaseTagRuleset(&p, t, s); err != nil {
 			return p, err
 		}
 	}

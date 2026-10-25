@@ -13,6 +13,7 @@ All supported rows require authenticated ownership (`owner.type=User` and owner 
 | security.dependabot_security_updates | Yes | Yes | automated-security-fixes GET / PUT / DELETE |
 | actions.sha_pinning_required | Yes | Yes | Actions permissions GET / PUT |
 | actions.fork_pr_approval_policy | Yes | No (public-fork policy) | fork-pr-contributor-approval GET / PUT |
+| rulesets.release_tag_protection | Yes | No (Free private restriction) | Rulesets list / detail / POST / PUT |
 | rulesets.main_protection | Yes | No (Free private restriction) | Rulesets list / detail / POST / PUT |
 | repository.has_issues | Yes | Yes | Repository GET / PATCH |
 | repository.has_wiki | Yes | **No, including false** | Repository GET / PATCH |
@@ -65,7 +66,7 @@ The [repository REST endpoints](https://docs.github.com/en/rest/repos/repos) and
 
 [Actions permissions](https://docs.github.com/en/rest/actions/permissions) documents sha_pinning_required on repository permissions and the fork-pr-contributor-approval endpoint with all_external_contributors. [Repository Actions settings](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) distinguishes public-fork contributor approval from private-fork workflow policies. This CLI supports contributor approval only for Public targets. The SHA requirement does not pin existing workflows automatically; such workflows may need source edits to run.
 
-[Ruleset availability](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets) limits Free rulesets to public repositories. [Rules REST API](https://docs.github.com/en/rest/repos/rules) and official OpenAPI establish repository branch rules, ~DEFAULT_BRANCH conditions, deletion / non_fast_forward / required_signatures / pull_request and the PR parameters required_approving_review_count=0 and allowed_merge_methods=[merge]. The public preset additionally enables repository merge commits so the rule is usable. It preserves existing unrelated rules and bypass actors; therefore pre-existing bypass actors may still bypass these protections. New rulesets have no bypass actors.
+[Ruleset availability](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets) limits Free rulesets to public repositories. [Rules REST API](https://docs.github.com/en/rest/repos/rules) and official OpenAPI establish repository branch rules, ~DEFAULT_BRANCH conditions, deletion / non_fast_forward / required_signatures / pull_request and the PR parameters required_approving_review_count=0 and allowed_merge_methods=[merge]. The public preset additionally enables repository merge commits so the rule is usable. It preserves existing unrelated rules and bypass actors; therefore pre-existing bypass actors may still bypass these protections. New main rulesets have no bypass actors.
 
 | Additional endpoint | Fine-grained PAT permission |
 | --- | --- |
@@ -80,3 +81,11 @@ The [repository REST endpoints](https://docs.github.com/en/rest/repos/repos) and
 | PUT /repos/{owner}/{repo}/rulesets/{id} | Administration: write |
 
 The Public preset includes all Private preset settings, with public-only ruleset and contributor-approval additions. Missing --config selects these presets; explicit TOML never inherits them. No paid-only private rule is silently attempted, and the unautomated Issue-permissions setting is visible in both documentation and both default plan/apply outputs.
+
+## Owner-only release tags
+
+[Available rules](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets) documents tag creation/update/deletion restrictions and Free availability for public repositories. [Rules REST API](https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset) documents target=tag, ref_name patterns, the creation/update/deletion rule types, and bypass actors of type User with a numeric actor_id and always mode. The official OpenAPI confirms these request fields. OrganizationAdmin is explicitly inapplicable to personal repositories; undocumented numeric RepositoryRole mappings are not used.
+
+The release-tags profile restricts refs/tags/v* to owner.id from the already verified repository GET response. That lookup needs Metadata read; ruleset listing/details also use Metadata read, and creation/update requires Administration write. A complete current bypass list must be readable before updating. Unlike main protection, this profile explicitly manages the entire bypass list, replacing any collaborator/app exceptions with the owner alone. Extra rules are retained. Private targets fail preflight on GitHub Free.
+
+GitHub's [workflow trigger model](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflows#workflow-triggers) runs the workflow version at the event's associated ref/SHA. Therefore the release workflow's main-ancestry check is not a substitute for server-enforced tag permissions. Arbitrary-tag pushers can otherwise alter the workflow itself. The default protects against non-owner tag pushers after apply; the personal owner and their credentials remain trusted. No live repository protection is changed merely by checking in these defaults.

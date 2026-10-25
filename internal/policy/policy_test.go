@@ -12,6 +12,7 @@ func target(private bool) Target {
 	if private {
 		t.Visibility = "private"
 	}
+	t.Owner.ID = 42
 	t.Owner.Login = "me"
 	t.Owner.Type = "User"
 	return t

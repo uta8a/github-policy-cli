@@ -40,7 +40,8 @@ type Security struct {
 	DependabotUpdates *bool `toml:"dependabot_security_updates"`
 }
 type Rulesets struct {
-	MainProtection *bool `toml:"main_protection"`
+	ReleaseTagProtection *bool `toml:"release_tag_protection"`
+	MainProtection       *bool `toml:"main_protection"`
 }
 type Issues struct {
 	CreationPolicy *string `toml:"creation_policy"`
@@ -92,6 +93,9 @@ func Parse(path string, data []byte) (Config, error) {
 func (c Config) Validate() error {
 	if c.Issues.CreationPolicy != nil {
 		return fmt.Errorf("issues.creation_policy: GitHub UI supports this setting, but no documented REST read/write field is available; configure Issues > Collaborators only manually")
+	}
+	if c.Rulesets.ReleaseTagProtection != nil && !*c.Rulesets.ReleaseTagProtection {
+		return fmt.Errorf("rulesets.release_tag_protection: only true is supported; omit to leave rulesets unchanged (no automatic deletion)")
 	}
 	if c.Rulesets.MainProtection != nil && !*c.Rulesets.MainProtection {
 		return fmt.Errorf("rulesets.main_protection: only true is supported; omit to leave rulesets unchanged (no automatic deletion)")

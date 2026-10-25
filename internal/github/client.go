@@ -175,11 +175,18 @@ func (c *Client) Fetch(ctx context.Context, name, login string, cfg policy.Confi
 		}
 	}
 	if cfg.Rulesets.MainProtection != nil {
-		s.MainRuleset, err = c.mainRuleset(ctx, t.FullName)
+		s.MainRuleset, err = c.namedRuleset(ctx, t.FullName, "main", "rulesets.main_protection")
 		if err != nil {
 			return t, s, err
 		}
 		s.RulesetsKnown = true
+	}
+	if cfg.Rulesets.ReleaseTagProtection != nil {
+		s.ReleaseTagRuleset, err = c.namedRuleset(ctx, t.FullName, "release-tags", "rulesets.release_tag_protection")
+		if err != nil {
+			return t, s, err
+		}
+		s.ReleaseTagsKnown = true
 	}
 	return t, s, nil
 }

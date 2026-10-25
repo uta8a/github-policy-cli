@@ -15,6 +15,7 @@ Targets **public and private repositories owned by the authenticated personal ac
 | Actions enablement, allowed actions, SHA pinning and workflow permissions | Supported | Supported |
 | Actions external contributor approval policy | Supported | Rejected |
 | Dependabot security updates | Supported | Supported |
+| Release tag protection (`v*`, owner-only creation/update/deletion) | Supported | Rejected on GitHub Free |
 | Main protection ruleset | Supported | Rejected on GitHub Free |
 | Permanent Issue creation restrictions | Manual configuration | Manual configuration |
 
@@ -43,8 +44,13 @@ Collaborator-only Issue permissions are [available in the GitHub UI](https://doc
 - Restrict deletions, block force pushes and require signed commits
 - Require a pull request before merging, zero required approvals, and Merge as the only allowed merge method
 - Actions: require approval for all external contributors
+- Active `release-tags` ruleset for `refs/tags/v*`: restrict creation, updates and deletion to the personal repository owner
 
-New rulesets have no bypass actors. If a `main` ruleset already exists, the CLI updates the specified settings while preserving additional rules, other PR parameters and bypass actors. Other rulesets are unchanged. Existing rules can make effective restrictions stricter than this preset. Multiple rulesets with the same name, a target other than branches, or unreadable current values cause preflight errors. Review existing exceptions on GitHub if you also want to remove them.
+New `main` rulesets have no bypass actors. If a `main` ruleset already exists, the CLI updates the specified settings while preserving additional rules, other PR parameters and bypass actors. Rulesets other than the named `main` and `release-tags` profiles are unchanged. Existing rules can make effective restrictions stricter than this preset. Multiple rulesets with the same name, a target other than branches, or unreadable current values cause preflight errors. Review existing exceptions on GitHub if you also want to remove them.
+
+**Release-tag protection manages its bypass list explicitly:** the sole bypass actor is the verified personal owner (`User`, numeric owner ID, mode `always`). Updating an existing `release-tags` ruleset removes all other bypass actors, including apps and collaborators; the before/after list is shown in plan. Additional rules in that ruleset are preserved. A missing owner ID, unreadable bypass list, duplicate name or non-tag target fails preflight.
+
+Apply these server-side tag rules from a trusted checkout before relying on tag-triggered releases. A tag-triggered workflow runs from the tagged commit, so its own main-ancestry check cannot defend against someone who can push a tag containing a modified workflow. The owner remains trusted to choose release commits; this policy cannot protect against a compromised owner account. The CLI does not change live GitHub settings until you run apply.
 
 Both presets restrict PR creation to collaborators, disable Projects and Dependabot security updates, enable release immutability and Actions SHA pinning, and allow merge commits only across the repository. Applying the public approval policy while Actions is disabled produces an error. The CLI does not enable Actions automatically.
 
@@ -93,6 +99,7 @@ sha_pinning_required = true
 # Deletion through false is not supported.
 # [rulesets]
 # main_protection = true
+# release_tag_protection = true # Owner-only v* tag creation/update/deletion
 ```
 
 Other supported keys are `repository.has_issues`, `has_wiki`, `delete_branch_on_merge`, `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge`; `pull_requests.creation_policy` (all / collaborators_only); `actions.enabled`, `allowed_actions` (all / local_only / selected); and `actions.workflow.default_workflow_permissions` (read / write), `can_approve_pull_request_reviews`.

@@ -11,7 +11,7 @@ import (
 func RulesetID(value any) (string, error) {
 	n, ok := value.(float64)
 	if !ok || n < 1 || n > 9007199254740991 || math.Trunc(n) != n {
-		return "", fmt.Errorf("rulesets.main_protection: missing or invalid ruleset ID")
+		return "", fmt.Errorf("rulesets: missing or invalid ruleset ID")
 	}
 	return fmt.Sprintf("%.0f", n), nil
 }

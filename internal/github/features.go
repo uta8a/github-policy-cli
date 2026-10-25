@@ -37,7 +37,7 @@ func (c *Client) readFeature(ctx context.Context, name, feature string) (map[str
 	}
 	return result, nil
 }
-func (c *Client) mainRuleset(ctx context.Context, name string) (map[string]any, error) {
+func (c *Client) namedRuleset(ctx context.Context, name, rulesetName, field string) (map[string]any, error) {
 	var found map[string]any
 	for page := 1; ; page++ {
 		var rows []map[string]any
@@ -47,17 +47,21 @@ func (c *Client) mainRuleset(ctx context.Context, name string) (map[string]any, 
 			return nil, err
 		}
 		if rows == nil {
-			return nil, fmt.Errorf("rulesets.main_protection: invalid null ruleset list")
+			return nil, fmt.Errorf("%s: invalid null ruleset list", field)
 		}
 		for _, row := range rows {
-			if row["name"] != "main" {
+			listedName, ok := row["name"].(string)
+			if !ok || listedName == "" {
+				return nil, fmt.Errorf("%s: malformed ruleset list entry", field)
+			}
+			if listedName != rulesetName {
 				continue
 			}
 			if row["source_type"] != "Repository" || row["source"] != name {
-				return nil, fmt.Errorf("rulesets.main_protection: main ruleset has an unexpected source")
+				return nil, fmt.Errorf("%s: ruleset has an unexpected source", field)
 			}
 			if found != nil {
-				return nil, fmt.Errorf("rulesets.main_protection: multiple repository rulesets are named main")
+				return nil, fmt.Errorf("%s: multiple repository rulesets are named %s", field, rulesetName)
 			}
 			found = row
 		}
@@ -70,14 +74,14 @@ func (c *Client) mainRuleset(ctx context.Context, name string) (map[string]any, 
 	}
 	id, err := policy.RulesetID(found["id"])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", field, err)
 	}
 	var detail map[string]any
 	if _, err = c.get(ctx, "repos/"+name+"/rulesets/"+id+"?includes_parents=false", &detail); err != nil {
 		return nil, err
 	}
-	if detail["id"] != found["id"] || detail["name"] != "main" || detail["source_type"] != "Repository" || detail["source"] != name {
-		return nil, fmt.Errorf("rulesets.main_protection: ruleset identity changed or missing")
+	if detail["id"] != found["id"] || detail["name"] != rulesetName || detail["source_type"] != "Repository" || detail["source"] != name {
+		return nil, fmt.Errorf("%s: ruleset identity changed or missing", field)
 	}
 	return detail, nil
 }

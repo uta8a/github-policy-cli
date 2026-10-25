@@ -25,3 +25,4 @@ dependabot_security_updates = false
 # The ruleset name is "main"; its target follows the default branch.
 [rulesets]
 main_protection = true
+release_tag_protection = true

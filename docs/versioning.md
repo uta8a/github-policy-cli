@@ -47,6 +47,12 @@ python3 -m unittest discover -s scripts -p 'test_*.py'
 
 Tests cover calendar validity, leap days, counter ordering, daily resets, backdating and the JST midnight boundary. The CLI test verifies that `--version` does not construct an authenticated API client.
 
+## Release trust boundary
+
+Before relying on tag-triggered releases in a public repository, apply the public preset's `rulesets.release_tag_protection = true` from a trusted checkout. It creates an active `release-tags` ruleset for `refs/tags/v*`, limiting creation, updates and deletion to the personal owner. Existing bypass actors in that profile are replaced with the owner alone. Review the plan before applying, and keep the owner's credentials trusted. Private GitHub Free repositories cannot use this ruleset.
+
+A tag can point at an unmerged PR commit, and GitHub runs the workflow from that tag. An attacker allowed to push such tags can remove the YAML's main-ancestry check, so the check alone is not a security boundary. Tag rules must be enforced by GitHub outside the workflow. Applying the default is a separate owner action; the release workflow does not bootstrap this protection.
+
 ## Automated release
 
 `.github/workflows/release.yml` runs on `v*` tag pushes. A tag push does not carry a target branch, so the workflow checks out the triggering commit with full history and requires it to be an ancestor of `origin/main`. It validates the real CalVer date and counter format, then runs the same build, formatting, lint and test matrix used for PRs. The tag date is not required to equal the rerun date, so an existing tag can be retried later.

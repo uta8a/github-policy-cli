@@ -20,23 +20,24 @@ type testTransport func(*http.Request) (*http.Response, error)
 func (t testTransport) RoundTrip(r *http.Request) (*http.Response, error) { return t(r) }
 
 type fixture struct {
-	releases map[string]any
-	security map[string]any
-	forkPR   map[string]any
-	ruleset  map[string]any
-	repos    map[string]map[string]any
-	actions  map[string]any
-	workflow map[string]any
-	requests []string
-	payloads []map[string]any
-	fail     string
+	releases   map[string]any
+	security   map[string]any
+	forkPR     map[string]any
+	ruleset    map[string]any
+	tagRuleset map[string]any
+	repos      map[string]map[string]any
+	actions    map[string]any
+	workflow   map[string]any
+	requests   []string
+	payloads   []map[string]any
+	fail       string
 }
 
 func setup(t *testing.T) (*fixture, Factory) {
 	t.Helper()
 	f := &fixture{releases: map[string]any{"enabled": false, "enforced_by_owner": false}, security: map[string]any{"enabled": true, "paused": false}, forkPR: map[string]any{"approval_policy": "first_time_contributors"}, repos: map[string]map[string]any{}, actions: map[string]any{"enabled": true, "allowed_actions": "selected", "sha_pinning_required": true}, workflow: map[string]any{"default_workflow_permissions": "write", "can_approve_pull_request_reviews": true}}
 	for _, name := range []string{"me/a", "me/b"} {
-		f.repos[name] = map[string]any{"full_name": name, "owner": map[string]any{"type": "User", "login": "me"}, "visibility": "public", "private": false, "has_projects": true, "allow_update_branch": false, "has_issues": true, "has_wiki": false, "delete_branch_on_merge": false, "allow_squash_merge": true, "allow_merge_commit": true, "allow_rebase_merge": false, "pull_request_creation_policy": "all"}
+		f.repos[name] = map[string]any{"full_name": name, "owner": map[string]any{"id": 42, "type": "User", "login": "me"}, "visibility": "public", "private": false, "has_projects": true, "allow_update_branch": false, "has_issues": true, "has_wiki": false, "delete_branch_on_merge": false, "allow_squash_merge": true, "allow_merge_commit": true, "allow_rebase_merge": false, "pull_request_creation_policy": "all"}
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + " " + r.URL.Path
@@ -80,12 +81,19 @@ func setup(t *testing.T) (*fixture, Factory) {
 			if f.ruleset != nil {
 				rows = append(rows, f.ruleset)
 			}
+			if f.tagRuleset != nil {
+				rows = append(rows, f.tagRuleset)
+			}
 			json.NewEncoder(w).Encode(rows)
 			return
 		}
 		if strings.Contains(r.URL.Path, "/rulesets") {
 			if r.Method == "GET" {
-				json.NewEncoder(w).Encode(f.ruleset)
+				current := f.ruleset
+				if strings.HasSuffix(r.URL.Path, "/124") {
+					current = f.tagRuleset
+				}
+				json.NewEncoder(w).Encode(current)
 				return
 			}
 			var body map[string]any
@@ -95,14 +103,17 @@ func setup(t *testing.T) (*fixture, Factory) {
 				return
 			}
 			f.payloads = append(f.payloads, body)
-			f.ruleset = body
-			f.ruleset["id"] = float64(123)
-			f.ruleset["source_type"] = "Repository"
-			f.ruleset["source"] = strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/repos/"), "/rulesets")
-			if r.Method == "PUT" {
-				f.ruleset["source"] = strings.Split(strings.TrimPrefix(r.URL.Path, "/repos/"), "/rulesets/")[0]
+			id := float64(123)
+			if body["name"] == "release-tags" {
+				id = 124
+				f.tagRuleset = body
+			} else {
+				f.ruleset = body
 			}
-			json.NewEncoder(w).Encode(f.ruleset)
+			body["id"] = id
+			body["source_type"] = "Repository"
+			body["source"] = strings.Split(strings.TrimPrefix(r.URL.Path, "/repos/"), "/rulesets")[0]
+			json.NewEncoder(w).Encode(body)
 			return
 		}
 		var current map[string]any
@@ -384,14 +395,14 @@ func TestMixedVisibilityDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
 	}
-	if writes(f.requests) != 10 || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.repos["me/a"]["has_projects"] != false || f.repos["me/a"]["allow_merge_commit"] != true || f.repos["me/a"]["allow_squash_merge"] != false || f.repos["me/a"]["pull_request_creation_policy"] != "collaborators_only" || f.forkPR["approval_policy"] != "all_external_contributors" {
+	if writes(f.requests) != 11 || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.repos["me/a"]["has_projects"] != false || f.repos["me/a"]["allow_merge_commit"] != true || f.repos["me/a"]["allow_squash_merge"] != false || f.repos["me/a"]["pull_request_creation_policy"] != "collaborators_only" || f.forkPR["approval_policy"] != "all_external_contributors" {
 		t.Fatalf("out=%s writes=%d", out, writes(f.requests))
 	}
 	if f.repos["me/b"]["has_projects"] != false || f.repos["me/b"]["pull_request_creation_policy"] != "collaborators_only" || f.repos["me/b"]["allow_squash_merge"] != false || f.repos["me/b"]["allow_update_branch"] != true {
 		t.Fatal("public did not inherit common settings")
 	}
 	out, _, err = invokeDefault(t, factory, "apply", "--all")
-	if err != nil || writes(f.requests) != 10 || strings.Count(out, "No changes.") != 2 {
+	if err != nil || writes(f.requests) != 11 || strings.Count(out, "No changes.") != 2 {
 		t.Fatalf("non-idempotent defaults: out=%s err=%v requests=%v", out, err, f.requests)
 	}
 }
@@ -421,7 +432,7 @@ func TestRulesetSkippedAfterMergeEnableFailure(t *testing.T) {
 	f.repos["me/a"]["allow_merge_commit"] = false
 	f.fail = "PATCH /repos/me/a"
 	out, stderr, err := invokeDefault(t, factory, "apply", "me/a")
-	if err == nil || !strings.Contains(out, "3 succeeded, 1 failed, 1 skipped") || !strings.Contains(stderr, "ruleset update skipped") {
+	if err == nil || !strings.Contains(out, "4 succeeded, 1 failed, 1 skipped") || !strings.Contains(stderr, "ruleset update skipped") {
 		t.Fatalf("out=%s stderr=%s err=%v", out, stderr, err)
 	}
 }
@@ -434,15 +445,15 @@ func TestPublicDefaultsIncludeCommonSettings(t *testing.T) {
 		t.Fatalf("out=%s err=%v", out, err)
 	}
 	out, _, err = invokeDefault(t, factory, "apply", "me/a")
-	if err != nil || writes(f.requests) != 6 {
+	if err != nil || writes(f.requests) != 7 {
 		t.Fatalf("out=%s err=%v requests=%v", out, err, f.requests)
 	}
 	r := f.repos["me/a"]
-	if r["has_projects"] != false || r["allow_update_branch"] != true || r["delete_branch_on_merge"] != true || r["allow_squash_merge"] != false || r["allow_rebase_merge"] != false || r["allow_merge_commit"] != true || r["pull_request_creation_policy"] != "collaborators_only" || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.forkPR["approval_policy"] != "all_external_contributors" || f.ruleset == nil {
+	if r["has_projects"] != false || r["allow_update_branch"] != true || r["delete_branch_on_merge"] != true || r["allow_squash_merge"] != false || r["allow_rebase_merge"] != false || r["allow_merge_commit"] != true || r["pull_request_creation_policy"] != "collaborators_only" || f.releases["enabled"] != true || f.security["enabled"] != false || f.actions["sha_pinning_required"] != true || f.forkPR["approval_policy"] != "all_external_contributors" || f.ruleset == nil || f.tagRuleset == nil {
 		t.Fatal("public preset omitted a common or public-only setting")
 	}
 	out, _, err = invokeDefault(t, factory, "apply", "me/a")
-	if err != nil || writes(f.requests) != 6 || !strings.Contains(out, "No changes.") {
+	if err != nil || writes(f.requests) != 7 || !strings.Contains(out, "No changes.") {
 		t.Fatalf("out=%s err=%v", out, err)
 	}
 }
@@ -458,5 +469,32 @@ func TestVersionDoesNotAuthenticate(t *testing.T) {
 	}
 	if out.String() != "repo-policy version v2026.10.18.0\n" {
 		t.Fatalf("version output=%q", out.String())
+	}
+}
+
+func TestReleaseTagPreflightAndIdempotency(t *testing.T) {
+	cfg := "[rulesets]\nrelease_tag_protection=true"
+	for _, verb := range []string{"plan", "apply"} {
+		f, factory := setup(t)
+		f.repos["me/b"]["private"] = true
+		f.repos["me/b"]["visibility"] = "private"
+		_, _, err := invoke(t, factory, cfg, verb, "--all")
+		if err == nil || !strings.Contains(err.Error(), "rulesets.release_tag_protection") || writes(f.requests) != 0 {
+			t.Fatalf("requests=%v err=%v", f.requests, err)
+		}
+	}
+	f, factory := setup(t)
+	if _, _, err := invoke(t, factory, cfg, "plan", "me/a"); err != nil || writes(f.requests) != 0 {
+		t.Fatalf("plan err=%v", err)
+	}
+	if _, _, err := invoke(t, factory, cfg, "apply", "me/a"); err != nil || writes(f.requests) != 1 || f.tagRuleset == nil {
+		t.Fatalf("apply err=%v", err)
+	}
+	if out, _, err := invoke(t, factory, cfg, "apply", "me/a"); err != nil || writes(f.requests) != 1 || !strings.Contains(out, "No changes.") {
+		t.Fatalf("repeat out=%s err=%v", out, err)
+	}
+	f.tagRuleset["bypass_actors"] = []any{}
+	if _, _, err := invoke(t, factory, cfg, "apply", "me/a"); err != nil || writes(f.requests) != 2 {
+		t.Fatalf("update err=%v", err)
 	}
 }
