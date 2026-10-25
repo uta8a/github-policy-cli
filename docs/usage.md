@@ -72,7 +72,7 @@ Authentication uses `GH_TOKEN` or credentials saved by `gh auth login`, through 
 
 ## Explicit TOML configuration
 
-`--config PATH` replaces the embedded defaults and manages **only the fields specified in that file**. A missing file is an error. Explicit `false` is distinct from omission. See [examples/policy.toml](../examples/policy.toml) for a minimal policy. You can also copy and edit the embedded presets.
+`--config PATH` replaces the embedded defaults and manages **only the fields specified in that file**. A missing file is an error. Explicit `false` is distinct from omission. See [examples/policy.toml](../examples/policy.toml) for a minimal policy or [examples/full-settings-policy.toml](../examples/full-settings-policy.toml) for every supported setting with options and visibility restrictions. You can also copy and edit the embedded presets.
 
 ```sh
 ./repo-policy plan owner/repo --config policy.toml
