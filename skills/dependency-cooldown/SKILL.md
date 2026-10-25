@@ -5,28 +5,28 @@ description: Apply a 14-day release cooldown when adding, updating, or checking 
 
 # Dependency cooldown: 14 days
 
-依存関係の追加・更新・バージョン確認時に使う。採用候補は、公開後 **14日間（336時間）以上** 経過したバージョンに限定する。
+Use this skill when adding, updating or checking dependencies. Only adopt versions published at least **14 days (336 hours)** ago.
 
-## 判定
+## Eligibility
 
-- 作業時点の現在時刻と公開時刻をUTCにそろえ、`published_at <= now - 14 days`を満たすことを確認する。ちょうど14日は採用可能。未来の時刻は不可。
-- 公式レジストリのバージョン別公開日時、または上流の公式リリース公開日時を確認する。複数の信頼できる公開日時が異なる場合は遅い方を使う。出典と確認時刻を記録する。
-- コミット日時、ダウンロード日時、キャッシュの更新日時を公開日時とみなさない。特にGo moduleの`.info`の`Time`だけでは、タグやリリースの公開後14日経過を証明できない。公式リリースの`published_at`や、信頼できるレジストリで既に14日以上観測されていた証拠を使う。
-- 公開日時を確認できない候補は「未確認」とし、新規採用しない。ネットワーク制限で確認できない場合も推測しない。
+- Compare the current time and publication time in UTC. A candidate is eligible when `published_at <= now - 14 days`. Exactly 14 days qualifies; future timestamps do not.
+- Verify the version-specific publication timestamp in the official package registry or the upstream project's official release metadata. If reliable publication timestamps disagree, use the later timestamp. Record the source and the time of verification.
+- Do not substitute commit times, download times or cache modification times for publication times. In particular, a Go module's `.info` `Time` alone does not prove that a tag or release has been public for 14 days. Use an official release's `published_at` or reliable registry evidence that the version was already observable at least 14 days ago.
+- Treat candidates with unverifiable publication times as unverified and do not adopt them. Do not guess when network restrictions prevent verification.
 
-## 追加・更新
+## Additions and updates
 
-1. 既存のmanifest・lockfileと対象パッケージを確認する。
-2. プロジェクトの互換性要件を満たし、14日経過済みの安定版から最も新しい適切な候補を選ぶ。「latest」を無条件に採用しない。
-3. 選定後にmanifest・lockfileを更新する。解決後の差分を確認し、今回新規導入・変更された推移的依存も同じ基準で検証する。満たさない場合は依存グラフを調整するか、該当変更を保留する。
-4. 変更に適したテスト・検査を実行し、採用バージョン、公開日時、証拠となるURL、cooldown判定を報告する。
+1. Inspect the existing manifests, lockfiles and affected packages.
+2. Select the newest appropriate stable version that meets compatibility requirements and has passed the cooldown. Do not adopt `latest` without verification.
+3. Update manifests and lockfiles after selecting eligible candidates. Inspect the resolved diff and apply the same check to newly introduced or changed transitive dependencies. Adjust the dependency graph or defer the affected change if it does not qualify.
+4. Run checks appropriate to the change. Report the selected versions, publication timestamps, source URLs and cooldown results.
 
-依存追加・更新を伴わない通常のビルドやテストでは、このスキルを理由に全依存を再監査しない。既存依存のバージョンも勝手に下げない。新しいツールチェーンを選ぶ場合は、その候補も同じ基準で確認する。
+Do not audit every dependency merely because an ordinary build or test is running without dependency changes. Do not automatically downgrade existing dependencies. Apply the same cooldown when selecting a new toolchain version.
 
-## チェック・監査
+## Checks and audits
 
-ファイル変更を依頼されていないチェックでは、現状を変更せず、候補を「採用可能」「14日未満」「公開日時未確認」に分けて報告する。14日未満の候補には採用可能になるUTC日時を示す。既存依存が14日未満だった場合も、その事実を報告し、自動でダウングレードしない。
+For read-only checks, leave files unchanged and classify candidates as eligible, younger than 14 days, or publication time unverified. For candidates still in cooldown, report the UTC time when they become eligible. Report existing versions younger than 14 days without automatically downgrading them.
 
-セキュリティ修正が14日未満の場合も黙って例外にしない。脆弱性とcooldownの両方を報告し、要件を満たす修正版があればそちらを選ぶ。明示的なユーザー指示による例外だけを、その対象・理由とともに記録する。cooldown経過は安全性の保証ではない。
+Do not silently exempt security fixes younger than 14 days. Explain both the vulnerability and the cooldown restriction, and select an eligible patched version if one exists. Only an explicit user instruction can authorize an exception; record its scope and rationale. Passing the cooldown does not establish that a dependency is safe.
 
-更新ボットの設定を扱う依頼では、既存ツールの公式仕様を確認し、対応するcooldownを14日にする。ツールの導入や新たな自動実行は、このスキルだけを根拠に追加しない。
+When asked to configure an update bot, consult its official documentation and set the existing tool's supported cooldown to 14 days. This skill alone does not authorize installing a new tool or enabling new automated jobs.
