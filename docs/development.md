@@ -20,6 +20,8 @@ Pushing a `v*` tag starts the [release workflow](../.github/workflows/release.ym
 
 Use English for repository documentation, code comments, CLI messages, commit messages, issues, and pull request titles/descriptions. For dependency additions, updates or checks, apply the [14-day dependency cooldown skill](../.agents/skills/dependency-cooldown/SKILL.md).
 
+Go toolchain updates use the same cooldown. Verify the candidate's version-specific publication time in the official Go release history, compare it with the current time in UTC, and wait at least 336 hours before changing `go.mod`, CI, release builds or the documented minimum. CI uses the declared minimum Go version. A one-version exception never carries forward to a later Go release.
+
 ```sh
 go test ./...
 go vet ./...

@@ -6,6 +6,8 @@ Select embedded personal presets, or load and validate explicit strict TOML → 
 
 Every invocation reads fresh state. No persistent state or saved plan. The entire target set is preflighted before apply makes any change: any ownership, capability, unreadable-field or configuration error aborts all writes. Preflight visits remaining targets to report errors. Once execution starts, API failures do not stop independent API groups or other repositories; the CLI reports successful/failed API operations and returns nonzero. No rollback or transaction is promised. Concurrent GitHub edits can still race the read/write interval.
 
+After repository metadata is read, the preset is resolved and scope/capability validation runs once before setting-specific reads. The resolved policy is returned with the fetched state and passed directly to the pure planner; orchestration does not resolve or validate it again.
+
 ## Packages
 
 - cmd/repo-policy: process exit status.
@@ -22,6 +24,8 @@ Only requested API groups are read. Missing/null requested values fail planning,
 Repository PATCH contains changed fields only. Actions PUT requires enabled: when only allowed_actions changes, preserve enabled from GET. Preserve existing allowed_actions and sha_pinning_required whenever returned, including when disabling Actions. Workflow PUT sends both known workflow fields, combining current and desired values. Never follow selected_actions_url or alter the separate selected-action allowlist. allowed_actions=selected uses the existing allowlist; defining patterns is outside the schema.
 
 Merged state must retain at least one PR merge method. Actions allowed_actions/workflow/fork-approval settings cannot be managed while the resulting enabled value is false (enable Actions explicitly if necessary). Enabling runs before workflow updates; if enabling fails, dependent workflow changes are skipped and reported. There is no automatic unarchive or automatic enabling of Actions.
+
+Operation dependencies are explicit planner data rather than inferred from endpoint strings during execution. An operation that establishes a prerequisite names the capability it provides, and dependent operations name that requirement and their skip reason. Independent operations continue after a prerequisite failure.
 
 ## Validation
 

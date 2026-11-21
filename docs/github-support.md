@@ -2,6 +2,19 @@
 
 Checked 2026-10-25. Sources are GitHub.com documentation and GitHub's official OpenAPI, not GHES documentation. The CLI applies a fixed Free capability model; it does not infer permission from an account's paid subscription.
 
+## Review procedure
+
+Revalidate this document before adding a setting and at least quarterly while the CLI is maintained:
+
+1. Record the UTC review date and the GitHub REST API version sent by the client.
+2. Check the GitHub.com documentation for plan, visibility and personal-account availability. Do not use GHES or organization-only behavior as evidence.
+3. Check the official `api.github.com` OpenAPI description for every GET and write path, request field, response field and enum used by the planner.
+4. Confirm fine-grained PAT permissions for each endpoint and update the tables below.
+5. Add or update `httptest` coverage for missing/null current values, request methods and payloads, pagination, idempotency and capability rejection.
+6. Keep the previous behavior and fail closed when availability, current-value readability or write semantics cannot be confirmed.
+
+The review is documentation and contract verification only. It must never call write endpoints or mutate a live repository.
+
 ## Setting matrix
 
 All supported rows require authenticated ownership (`owner.type=User` and owner login matching GET /user). Public and private refer to GitHub Free personal repositories.

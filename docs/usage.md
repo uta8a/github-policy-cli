@@ -57,7 +57,7 @@ Both presets restrict PR creation to collaborators, disable Projects and Dependa
 
 ## Build and authentication
 
-Requires Go 1.26.7 or later, as required by go-gh.
+Requires Go 1.27.3 or later, as required by this project.
 
 ```sh
 go build -o repo-policy ./cmd/repo-policy

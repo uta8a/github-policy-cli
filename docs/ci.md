@@ -3,7 +3,7 @@
 ## Workflows
 
 - `ci.yml`: PRs and pushes to main; calls the reusable check matrix.
-- `checks.yml`: independent build, fmt, lint and test jobs on Ubuntu 24.04. Lint uses the Go toolchain's `go vet`. Tests include Go's race detector and Python CalVer tests. Module files are read-only during Go commands.
+- `checks.yml`: runs independent build, fmt, lint and test jobs on Ubuntu 24.04 with the declared minimum Go version. Lint uses the Go toolchain's `go vet`. Tests include Go's race detector and Python CalVer tests. Module files are read-only during Go commands.
 - `release.yml`: validates the triggering CalVer tag and main ancestry, runs the shared checks, cross-compiles Darwin ARM64 and Linux AMD64, then publishes archives and SHA-256 checksums. See [versioning](versioning.md).
 
 Checks and release builds use the triggering commit SHA, with checkout credentials removed after checkout. Setup-go's cache is disabled to avoid introducing additional cache state or save operations in untrusted PRs. GitHub-hosted Ubuntu supplies Python, Git, curl, tar and the GitHub CLI; these platform tools follow the runner image rather than project dependency manifests.
@@ -14,19 +14,23 @@ The release workflow's ancestry checks protect against mistakes in trusted workf
 
 ## Cooldown review
 
+Every Go toolchain change is subject to the same 14-day (336-hour) cooldown as module and workflow dependencies. Use the version-specific publication date from the official Go release history, evaluate eligibility in UTC, and record the verification time and source here before changing any workflow or minimum-version declaration. Exactly 336 hours is eligible. Unverifiable publication times are not eligible. A human-authorized exception must identify the exact version, scope and rationale and does not apply to later releases.
+
 Reviewed on 2026-10-25 UTC. No application dependency versions were changed. The JavaScript Actions are used as their bundled, SHA-pinned distributions; CI does not install their development dependencies.
 
 | Tool | Selected version / SHA | Official publication | Decision |
 | --- | --- | --- | --- |
 | actions/checkout | v7.0.1 / 3d3c42e5aac5ba805825da76410c181273ba90b1 | 2026-07-20 15:10:05 UTC | At least 14 days old |
 | actions/setup-go | v7.0.0 / b7ad1dad31e06c5925ef5d2fc7ad053ef454303e | 2026-07-16 02:50:50 UTC | At least 14 days old |
-| Go | 1.27.3 | 2026-10-19 | Explicit human-authorized exception |
+| Go | 1.27.3 | 2026-10-19 | Eligible; reverified 2026-11-21 05:25:37 UTC |
 
 Sources: [checkout release](https://github.com/actions/checkout/releases/tag/v7.0.1), [setup-go release](https://github.com/actions/setup-go/releases/tag/v7.0.0), [Go release history](https://go.dev/doc/devel/release). Full Actions commit pins were resolved from their official tag references. Both selected Actions run on Node 24, supported by current GitHub-hosted runners.
 
 ### Explicit exception: Go 1.27.3
 
 On 2026-10-25, the human user explicitly authorized adopting Go 1.27.3 before the 14-day cooldown ended. This exception applies only to Go 1.27.3 and includes its security fixes; it does not exempt other tools or future Go versions. Only explicit human instructions can authorize cooldown exceptions. Existing dependency-cooldown instructions remain in force.
+
+On 2026-11-21, the official release history was rechecked at 05:25:37 UTC. The 2026-10-19 release date was then more than 336 hours old, so Go 1.27.3 was eligible without relying on the earlier exception. The human user also explicitly authorized dropping Go 1.26.7 support; the project minimum is now Go 1.27.3.
 
 ### Linter compatibility
 

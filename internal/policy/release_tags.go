@@ -57,7 +57,9 @@ func planReleaseTagRuleset(p *Plan, t Target, s State) error {
 		}
 		types[kind] = true
 	}
-	ruleOrder(rules)
+	if err := ruleOrder(rules); err != nil {
+		return fmt.Errorf("%s: %w", field, err)
+	}
 	if s.ReleaseTagRuleset != nil {
 		before = cloneObject(body)
 	}
@@ -74,12 +76,14 @@ func planReleaseTagRuleset(p *Plan, t Target, s State) error {
 			rules = append(rules, map[string]any{"type": kind})
 		}
 	}
-	ruleOrder(rules)
+	if err := ruleOrder(rules); err != nil {
+		return fmt.Errorf("%s: %w", field, err)
+	}
 	body["rules"] = rules
 	if sameJSON(before, body) {
 		return nil
 	}
 	p.Changes = append(p.Changes, Change{field, before, body})
-	p.Operations = append(p.Operations, Operation{method, endpoint, body})
+	p.Operations = append(p.Operations, Operation{Method: method, Endpoint: endpoint, Body: body})
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/uta8a/github-policy-cli/internal/policy"
@@ -65,7 +64,7 @@ func (c *Client) namedRuleset(ctx context.Context, name, rulesetName, field stri
 			}
 			found = row
 		}
-		if !strings.Contains(headers.Get("Link"), `rel="next"`) && len(rows) < 100 {
+		if !hasNextPage(headers) {
 			break
 		}
 	}

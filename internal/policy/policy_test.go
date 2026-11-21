@@ -214,3 +214,11 @@ func TestResultingMergeValidation(t *testing.T) {
 		t.Fatal("all merge methods disabled")
 	}
 }
+
+func TestRuleOrderRejectsMalformedRules(t *testing.T) {
+	for _, rules := range [][]any{{"invalid"}, {map[string]any{}}, {map[string]any{"type": 3}}} {
+		if err := ruleOrder(rules); err == nil {
+			t.Fatalf("accepted malformed rules: %#v", rules)
+		}
+	}
+}

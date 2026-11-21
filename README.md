@@ -11,7 +11,7 @@ A Go CLI for public and private repositories owned by your personal GitHub.com a
 
 ## Quick start
 
-Requires Go 1.26.7 or later.
+Requires Go 1.27.3 or later.
 
 Create a token in [GitHub's fine-grained PAT settings](https://github.com/settings/personal-access-tokens) with your personal account as resource owner, the intended repositories selected, and **Administration: Read and write / Metadata: Read** permissions.
 
