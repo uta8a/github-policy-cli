@@ -1,6 +1,6 @@
 module github.com/uta8a/github-policy-cli
 
-go 1.26.7
+go 1.27.3
 
 require (
 	github.com/cli/go-gh/v2 v2.17.0
