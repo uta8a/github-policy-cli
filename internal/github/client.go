@@ -94,6 +94,17 @@ func (c *Client) Identity(ctx context.Context) (string, error) {
 	}
 	return u.Login, nil
 }
+func hasNextPage(header http.Header) bool {
+	for _, link := range strings.Split(header.Get("Link"), ",") {
+		parts := strings.Split(link, ";")
+		for _, parameter := range parts[1:] {
+			if strings.TrimSpace(parameter) == `rel="next"` {
+				return true
+			}
+		}
+	}
+	return false
+}
 func (c *Client) Discover(ctx context.Context, login string) ([]string, error) {
 	names := map[string]bool{}
 	for page := 1; ; page++ {
@@ -109,7 +120,7 @@ func (c *Client) Discover(ctx context.Context, login string) ([]string, error) {
 			}
 		}
 		// Page numbers are generated locally: never send a token to a Link URL.
-		if !strings.Contains(header.Get("Link"), `rel="next"`) && len(repos) < 100 {
+		if !hasNextPage(header) {
 			break
 		}
 	}
@@ -120,75 +131,78 @@ func (c *Client) Discover(ctx context.Context, login string) ([]string, error) {
 	sort.Strings(out)
 	return out, nil
 }
-func (c *Client) Fetch(ctx context.Context, name, login string, cfg policy.Config) (policy.Target, policy.State, error) {
+func (c *Client) Fetch(ctx context.Context, name, login string, cfg policy.Config) (policy.Target, policy.State, policy.Config, error) {
 	var t policy.Target
 	s := policy.State{}
+	fail := func(err error) (policy.Target, policy.State, policy.Config, error) {
+		return t, s, policy.Config{}, err
+	}
 	if !ValidName(name) {
-		return t, s, fmt.Errorf("invalid repository: expected owner/repo")
+		return fail(fmt.Errorf("invalid repository: expected owner/repo"))
 	}
 	if _, err := c.get(ctx, "repos/"+name, &s.Repository); err != nil {
-		return t, s, err
+		return fail(err)
 	}
 	raw, err := json.Marshal(s.Repository)
 	if err != nil {
-		return t, s, fmt.Errorf("%s: invalid repository metadata", name)
+		return fail(fmt.Errorf("%s: invalid repository metadata", name))
 	}
 	if err = json.Unmarshal(raw, &t); err != nil {
-		return t, s, fmt.Errorf("%s: invalid repository metadata", name)
+		return fail(fmt.Errorf("%s: invalid repository metadata", name))
 	}
 	if !strings.EqualFold(t.FullName, name) || !strings.EqualFold(strings.Split(name, "/")[0], t.Owner.Login) {
-		return t, s, fmt.Errorf("%s: repository identity changed or missing; use its current owner/name", name)
+		return fail(fmt.Errorf("%s: repository identity changed or missing; use its current owner/name", name))
 	}
 	cfg, err = cfg.ForTarget(t)
 	if err != nil {
-		return t, s, err
+		return fail(err)
 	}
 	if err = t.Validate(cfg, login); err != nil {
-		return t, s, err
+		return fail(err)
 	}
 	if cfg.NeedsActions() {
 		if _, err = c.get(ctx, "repos/"+name+"/actions/permissions", &s.Actions); err != nil {
-			return t, s, err
+			return fail(err)
 		}
 	}
 	if cfg.NeedsWorkflow() {
 		if _, err = c.get(ctx, "repos/"+name+"/actions/permissions/workflow", &s.Workflow); err != nil {
-			return t, s, err
+			return fail(err)
 		}
 	}
 
 	if cfg.Actions.ForkPRApproval != nil {
 		if _, err = c.get(ctx, "repos/"+name+"/actions/permissions/fork-pr-contributor-approval", &s.ForkPR); err != nil {
-			return t, s, err
+			return fail(err)
 		}
 	}
 	if cfg.Releases.Immutable != nil {
 		s.Releases, err = c.readFeature(ctx, name, "immutable-releases")
 		if err != nil {
-			return t, s, err
+			return fail(err)
 		}
 	}
 	if cfg.Security.DependabotUpdates != nil {
 		s.Security, err = c.readFeature(ctx, name, "automated-security-fixes")
 		if err != nil {
-			return t, s, err
+			return fail(err)
 		}
 	}
 	if cfg.Rulesets.MainProtection != nil {
 		s.MainRuleset, err = c.namedRuleset(ctx, t.FullName, "main", "rulesets.main_protection")
 		if err != nil {
-			return t, s, err
+			return fail(err)
 		}
 		s.RulesetsKnown = true
 	}
 	if cfg.Rulesets.ReleaseTagProtection != nil {
 		s.ReleaseTagRuleset, err = c.namedRuleset(ctx, t.FullName, "release-tags", "rulesets.release_tag_protection")
 		if err != nil {
-			return t, s, err
+			return fail(err)
 		}
 		s.ReleaseTagsKnown = true
 	}
-	return t, s, nil
+	return t, s, cfg, nil
 }
 func (c *Client) Execute(ctx context.Context, op policy.Operation) error {
 	var body io.Reader

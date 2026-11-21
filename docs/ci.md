@@ -3,7 +3,7 @@
 ## Workflows
 
 - `ci.yml`: PRs and pushes to main; calls the reusable check matrix.
-- `checks.yml`: independent build, fmt, lint and test jobs on Ubuntu 24.04. Lint uses the Go toolchain's `go vet`. Tests include Go's race detector and Python CalVer tests. Module files are read-only during Go commands.
+- `checks.yml`: verifies the declared minimum Go version with tests and a build, then runs independent build, fmt, lint and test jobs on Ubuntu 24.04 with the selected release toolchain. Lint uses the Go toolchain's `go vet`. Tests include Go's race detector and Python CalVer tests. Module files are read-only during Go commands.
 - `release.yml`: validates the triggering CalVer tag and main ancestry, runs the shared checks, cross-compiles Darwin ARM64 and Linux AMD64, then publishes archives and SHA-256 checksums. See [versioning](versioning.md).
 
 Checks and release builds use the triggering commit SHA, with checkout credentials removed after checkout. Setup-go's cache is disabled to avoid introducing additional cache state or save operations in untrusted PRs. GitHub-hosted Ubuntu supplies Python, Git, curl, tar and the GitHub CLI; these platform tools follow the runner image rather than project dependency manifests.
@@ -13,6 +13,8 @@ Checks and release builds use the triggering commit SHA, with checkout credentia
 The release workflow's ancestry checks protect against mistakes in trusted workflow code. They cannot constrain an attacker who can tag a modified workflow. Before enabling tag-based publishing, apply the public default's owner-only release-tags ruleset from a trusted checkout. See the [release trust boundary](versioning.md#release-trust-boundary). CI does not modify these settings automatically. This policy controls matching tag operations; it does not independently restrict every way a repository-write workflow could publish a release. Review workflow-write and publication permissions separately, and keep the owner account trusted.
 
 ## Cooldown review
+
+Every Go toolchain change is subject to the same 14-day (336-hour) cooldown as module and workflow dependencies. Use the version-specific publication date from the official Go release history, evaluate eligibility in UTC, and record the verification time and source here before changing any workflow or minimum-version declaration. Exactly 336 hours is eligible. Unverifiable publication times are not eligible. A human-authorized exception must identify the exact version, scope and rationale and does not apply to later releases.
 
 Reviewed on 2026-10-25 UTC. No application dependency versions were changed. The JavaScript Actions are used as their bundled, SHA-pinned distributions; CI does not install their development dependencies.
 

@@ -69,6 +69,9 @@ type Change struct {
 type Operation struct {
 	Method, Endpoint string
 	Body             map[string]any
+	Provides         string
+	Requires         string
+	SkipReason       string
 }
 type Plan struct {
 	Repository string
@@ -116,8 +119,12 @@ func Build(c Config, t Target, s State) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	isDefault := c.UsesPersonalDefaults()
-	c = resolved
+	return BuildResolved(resolved, t, s, c.UsesPersonalDefaults())
+}
+
+// BuildResolved constructs a plan from a policy already resolved for t.
+// Callers that fetch remote state should resolve and validate once, before I/O.
+func BuildResolved(c Config, t Target, s State, isDefault bool) (Plan, error) {
 	p := Plan{Repository: t.FullName}
 	if isDefault {
 		p.Notes = append(p.Notes, "Manual setting required: Issues > Issue permissions > Collaborators only (no documented REST read/write field).")
@@ -209,7 +216,11 @@ func Build(c Config, t Target, s State) (Plan, error) {
 	}
 	base := "repos/" + t.FullName
 	if len(repo) > 0 {
-		p.Operations = append(p.Operations, Operation{"PATCH", base, repo})
+		op := Operation{Method: "PATCH", Endpoint: base, Body: repo}
+		if before, ok := s.Repository["allow_merge_commit"].(bool); ok && !before && repo["allow_merge_commit"] == true {
+			op.Provides = "merge-commits-enabled"
+		}
+		p.Operations = append(p.Operations, op)
 	}
 	if len(actions) > 0 {
 		if _, ok := actions["enabled"]; !ok {
@@ -236,7 +247,11 @@ func Build(c Config, t Target, s State) (Plan, error) {
 				actions[f.k] = v
 			}
 		}
-		p.Operations = append(p.Operations, Operation{"PUT", base + "/actions/permissions", actions})
+		op := Operation{Method: "PUT", Endpoint: base + "/actions/permissions", Body: actions}
+		if before, ok := s.Actions["enabled"].(bool); ok && !before && actions["enabled"] == true {
+			op.Provides = "actions-enabled"
+		}
+		p.Operations = append(p.Operations, op)
 	}
 	if len(workflow) > 0 {
 		for _, f := range []struct {
@@ -254,7 +269,12 @@ func Build(c Config, t Target, s State) (Plan, error) {
 				workflow[f.k] = v
 			}
 		}
-		p.Operations = append(p.Operations, Operation{"PUT", base + "/actions/permissions/workflow", workflow})
+		op := Operation{Method: "PUT", Endpoint: base + "/actions/permissions/workflow", Body: workflow}
+		if actionsEnableRequired(p.Operations) {
+			op.Requires = "actions-enabled"
+			op.SkipReason = "workflow update skipped because enabling Actions failed"
+		}
+		p.Operations = append(p.Operations, op)
 	}
 
 	for _, change := range p.Changes {
@@ -279,7 +299,12 @@ func Build(c Config, t Target, s State) (Plan, error) {
 			}
 			p.Operations = append(p.Operations, Operation{Method: method, Endpoint: base + "/" + endpoint})
 		case "actions.fork_pr_approval_policy":
-			p.Operations = append(p.Operations, Operation{"PUT", base + "/actions/permissions/fork-pr-contributor-approval", map[string]any{"approval_policy": change.After}})
+			op := Operation{Method: "PUT", Endpoint: base + "/actions/permissions/fork-pr-contributor-approval", Body: map[string]any{"approval_policy": change.After}}
+			if actionsEnableRequired(p.Operations) {
+				op.Requires = "actions-enabled"
+				op.SkipReason = "contributor approval update skipped because enabling Actions failed"
+			}
+			p.Operations = append(p.Operations, op)
 		}
 	}
 	if c.Rulesets.MainProtection != nil {
@@ -294,4 +319,13 @@ func Build(c Config, t Target, s State) (Plan, error) {
 	}
 	sort.Slice(p.Changes, func(i, j int) bool { return p.Changes[i].Path < p.Changes[j].Path })
 	return p, nil
+}
+
+func actionsEnableRequired(operations []Operation) bool {
+	for _, op := range operations {
+		if op.Provides == "actions-enabled" {
+			return true
+		}
+	}
+	return false
 }

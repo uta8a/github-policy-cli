@@ -67,6 +67,47 @@ func TestDiscoveryPagination(t *testing.T) {
 		t.Fatalf("pages=%d names=%v", pages, names)
 	}
 }
+
+func TestHasNextPage(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		link string
+		want bool
+	}{
+		{name: "missing"},
+		{name: "last page", link: `<https://api.github.com/resource?page=1>; rel="prev"`},
+		{name: "next", link: `<https://api.github.com/resource?page=2>; rel="next", <https://api.github.com/resource?page=4>; rel="last"`, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			header := http.Header{}
+			header.Set("Link", test.link)
+			if got := hasNextPage(header); got != test.want {
+				t.Fatalf("hasNextPage()=%v want=%v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestDiscoveryStopsWithoutNextLinkAtFullPage(t *testing.T) {
+	requests := 0
+	c := mock(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		rows := make([]map[string]any, 100)
+		for i := range rows {
+			rows[i] = map[string]any{
+				"full_name":  fmt.Sprintf("me/repo-%d", i),
+				"visibility": "public",
+				"owner":      map[string]any{"type": "User", "login": "me"},
+			}
+		}
+		json.NewEncoder(w).Encode(rows)
+	})
+	names, err := c.Discover(context.Background(), "me")
+	if err != nil || requests != 1 || len(names) != 100 {
+		t.Fatalf("requests=%d names=%d err=%v", requests, len(names), err)
+	}
+}
+
 func TestSafeErrors(t *testing.T) {
 	for _, status := range []int{401, 403, 404, 409, 422, 429, 500} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
@@ -97,7 +138,7 @@ func TestFetchPrivateWikiBeforeActionsRead(t *testing.T) {
 	cfg := policy.Config{}
 	cfg.Repository.HasWiki = &value
 	cfg.Actions.Enabled = &value
-	_, _, err := c.Fetch(context.Background(), "me/repo", "me", cfg)
+	_, _, _, err := c.Fetch(context.Background(), "me/repo", "me", cfg)
 	if err == nil || !strings.Contains(err.Error(), "has_wiki") || calls != 1 {
 		t.Fatalf("calls=%d err=%v", calls, err)
 	}

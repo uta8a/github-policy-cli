@@ -16,20 +16,65 @@ func RulesetID(value any) (string, error) {
 	return fmt.Sprintf("%.0f", n), nil
 }
 func cloneObject(object map[string]any) map[string]any {
-	data, _ := json.Marshal(object)
-	var result map[string]any
-	_ = json.Unmarshal(data, &result)
-	return result
+	return cloneValue(object).(map[string]any)
 }
-func ruleOrder(rules []any) {
+func cloneValue(value any) any {
+	switch value := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(value))
+		for key, child := range value {
+			result[key] = cloneValue(child)
+		}
+		return result
+	case []any:
+		result := make([]any, len(value))
+		for i, child := range value {
+			result[i] = cloneValue(child)
+		}
+		return result
+	case int:
+		return float64(value)
+	case int8:
+		return float64(value)
+	case int16:
+		return float64(value)
+	case int32:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case uint:
+		return float64(value)
+	case uint8:
+		return float64(value)
+	case uint16:
+		return float64(value)
+	case uint32:
+		return float64(value)
+	case uint64:
+		return float64(value)
+	default:
+		return value
+	}
+}
+func ruleOrder(rules []any) error {
+	for _, rule := range rules {
+		object, ok := rule.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid current rule")
+		}
+		if kind, ok := object["type"].(string); !ok || kind == "" {
+			return fmt.Errorf("missing current rule type")
+		}
+	}
 	sort.SliceStable(rules, func(i, j int) bool {
 		return rules[i].(map[string]any)["type"].(string) < rules[j].(map[string]any)["type"].(string)
 	})
+	return nil
 }
 func sameJSON(a, b any) bool {
-	left, _ := json.Marshal(a)
-	right, _ := json.Marshal(b)
-	return bytes.Equal(left, right)
+	left, leftErr := json.Marshal(a)
+	right, rightErr := json.Marshal(b)
+	return leftErr == nil && rightErr == nil && bytes.Equal(left, right)
 }
 
 // The named main profile manages only the requested rules. Other rules, PR
@@ -96,7 +141,9 @@ func planMainRuleset(p *Plan, t Target, s State) error {
 		}
 		byType[kind] = object
 	}
-	ruleOrder(rules)
+	if err := ruleOrder(rules); err != nil {
+		return fmt.Errorf("rulesets.main_protection: %w", err)
+	}
 	if current != nil {
 		before = cloneObject(body)
 	}
@@ -144,12 +191,22 @@ func planMainRuleset(p *Plan, t Target, s State) error {
 	}
 	parameters["required_approving_review_count"] = 0
 	parameters["allowed_merge_methods"] = []any{"merge"}
-	ruleOrder(rules)
+	if err := ruleOrder(rules); err != nil {
+		return fmt.Errorf("rulesets.main_protection: %w", err)
+	}
 	body["rules"] = rules
 	if sameJSON(before, body) {
 		return nil
 	}
 	p.Changes = append(p.Changes, Change{"rulesets.main_protection", before, body})
-	p.Operations = append(p.Operations, Operation{method, endpoint, body})
+	op := Operation{Method: method, Endpoint: endpoint, Body: body}
+	for _, candidate := range p.Operations {
+		if candidate.Provides == "merge-commits-enabled" {
+			op.Requires = "merge-commits-enabled"
+			op.SkipReason = "ruleset update skipped because enabling merge commits failed"
+			break
+		}
+	}
+	p.Operations = append(p.Operations, op)
 	return nil
 }

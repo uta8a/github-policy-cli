@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/uta8a/github-policy-cli/internal/github"
@@ -16,7 +15,7 @@ import (
 type Client interface {
 	Identity(context.Context) (string, error)
 	Discover(context.Context, string) ([]string, error)
-	Fetch(context.Context, string, string, policy.Config) (policy.Target, policy.State, error)
+	Fetch(context.Context, string, string, policy.Config) (policy.Target, policy.State, policy.Config, error)
 	Execute(context.Context, policy.Operation) error
 }
 type Factory func() (Client, error)
@@ -90,18 +89,10 @@ func run(ctx context.Context, out, errOut io.Writer, client Client, cfg policy.C
 	plans := make([]policy.Plan, 0, len(names))
 	var preflight []error
 	for _, name := range names {
-		target, state, fetchErr := client.Fetch(ctx, name, login, cfg)
-		if fetchErr == nil {
-			resolved, resolveErr := cfg.ForTarget(target)
-			if resolveErr != nil {
-				fetchErr = resolveErr
-			} else {
-				fetchErr = target.Validate(resolved, login)
-			}
-		}
+		target, state, resolved, fetchErr := client.Fetch(ctx, name, login, cfg)
 		var p policy.Plan
 		if fetchErr == nil {
-			p, fetchErr = policy.Build(cfg, target, state)
+			p, fetchErr = policy.BuildResolved(resolved, target, state, cfg.UsesPersonalDefaults())
 		}
 		if fetchErr != nil {
 			preflight = append(preflight, fmt.Errorf("%s: %s: %w", path, name, fetchErr))
@@ -123,40 +114,18 @@ func run(ctx context.Context, out, errOut io.Writer, client Client, cfg policy.C
 	}
 	success, failed, skipped := 0, 0, 0
 	for _, p := range plans {
-		enabling := false
-		for _, change := range p.Changes {
-			if change.Path == "actions.enabled" && change.Before == false && change.After == true {
-				enabling = true
-			}
-		}
-		enableFailed := false
-		mergeFailed := false
-		mergeEnabling := false
-		for _, change := range p.Changes {
-			if change.Path == "repository.allow_merge_commit" && change.Before == false && change.After == true {
-				mergeEnabling = true
-			}
-		}
+		failedPrerequisites := map[string]bool{}
 		for _, op := range p.Operations {
-			if mergeFailed && strings.HasPrefix(op.Endpoint, "repos/"+p.Repository+"/rulesets") && op.Body["name"] == "main" {
+			if op.Requires != "" && failedPrerequisites[op.Requires] {
 				skipped++
-				fmt.Fprintf(errOut, "%s: ruleset update skipped because enabling merge commits failed\n", p.Repository)
-				continue
-			}
-			if enableFailed && (op.Endpoint == "repos/"+p.Repository+"/actions/permissions/workflow" || op.Endpoint == "repos/"+p.Repository+"/actions/permissions/fork-pr-contributor-approval") {
-				skipped++
-				fmt.Fprintf(errOut, "%s: workflow update skipped because enabling Actions failed\n", p.Repository)
+				fmt.Fprintf(errOut, "%s: %s\n", p.Repository, op.SkipReason)
 				continue
 			}
 			if err := client.Execute(ctx, op); err != nil {
 				failed++
 				fmt.Fprintf(errOut, "%s: %v\n", p.Repository, err)
-				if mergeEnabling && op.Method == "PATCH" && op.Endpoint == "repos/"+p.Repository {
-					mergeFailed = true
-				}
-				// A failed Actions enable must not be followed by dependent workflow writes.
-				if enabling && op.Endpoint == "repos/"+p.Repository+"/actions/permissions" {
-					enableFailed = true
+				if op.Provides != "" {
+					failedPrerequisites[op.Provides] = true
 				}
 				continue
 			}
